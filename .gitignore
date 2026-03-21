@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment & Secrets
+.env
+.env.*
+.env*.local
+*.key
+*.pem
+vault/
+.secrets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage & Testing
+coverage/
+.vitest/
+
+# WebUI build
+.webui-dist/
+web/dist/
+
+# Logs
+*.log
+logs/
+
+# Data
+*.sqlite
+*.db
+data/
+
+# Docker
+.docker/

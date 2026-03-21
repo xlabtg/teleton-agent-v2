@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@teleton/core/*": ["./packages/core/src/*"],
+      "@teleton/infrastructure/*": ["./packages/infrastructure/src/*"],
+      "@teleton/api/*": ["./packages/api/src/*"],
+      "@teleton/sdk/*": ["./packages/sdk/src/*"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "apps/*/src/**/*.ts",
+    "__tests__/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "web"]
+}
