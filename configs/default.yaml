@@ -1,0 +1,40 @@
+# Teleton Agent V2 — Default Configuration
+# Copy to ~/.teleton-v2/config.yaml and modify as needed
+
+telegram:
+  api_id: 0
+  api_hash: ""
+  # session_string: "" # Set via TELETON_TELEGRAM_SESSION env var
+
+ton:
+  network: "testnet"
+  # mnemonic: "" # Set via TELETON_TON_MNEMONIC env var
+
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  temperature: 0.7
+  max_tokens: 4096
+  # api_key: "" # Set via TELETON_LLM_API_KEY env var
+
+database:
+  path: "./data/teleton.db"
+
+api:
+  port: 3000
+  host: "0.0.0.0"
+  cors:
+    - "http://localhost:5173"
+
+security:
+  rate_limit_window: 900000  # 15 minutes in ms
+  rate_limit_max: 100
+  # jwt_secret: "" # Set via TELETON_JWT_SECRET env var
+
+agent:
+  max_iterations: 20
+  timeout_ms: 120000  # 2 minutes
+  personality: |
+    You are Teleton, a personal AI agent for Telegram and TON blockchain.
+    You help users manage their Telegram accounts and TON wallets.
+    You are helpful, precise, and security-conscious.

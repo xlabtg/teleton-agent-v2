@@ -1,0 +1,66 @@
+# Security Checklist — Teleton Agent V2
+# Review before every release
+
+pre_launch:
+  secrets:
+    - name: "API keys in vault/env"
+      description: "All API keys must be in vault or environment variables"
+      required: true
+    - name: "No hardcoded credentials in git"
+      description: "Run git-secrets scan on entire history"
+      required: true
+    - name: "Key rotation configured"
+      description: "Rotation policy set for 90 days"
+      required: false
+
+  authentication:
+    - name: "JWT with refresh tokens"
+      description: "Short-lived access tokens + refresh rotation"
+      required: true
+    - name: "RBAC on all endpoints"
+      description: "Role-based access control enforced"
+      required: true
+    - name: "2FA for admin roles"
+      description: "Optional two-factor authentication"
+      required: false
+
+  input_validation:
+    - name: "Input sanitization"
+      description: "All user inputs sanitized before processing"
+      required: true
+    - name: "SQL injection protection"
+      description: "Parameterized queries only"
+      required: true
+    - name: "XSS protection"
+      description: "CSP headers + output encoding"
+      required: true
+
+  rate_limiting:
+    - name: "Per-IP + per-user limits"
+      description: "Adaptive rate limiting by role"
+      required: true
+    - name: "Rate limit logging"
+      description: "All limit exceedances logged"
+      required: true
+
+  audit:
+    - name: "Action logging"
+      description: "All critical actions logged with context"
+      required: true
+    - name: "Tamper-proof logs"
+      description: "Logs protected from modification"
+      required: true
+
+  dependencies:
+    - name: "Zero production vulnerabilities"
+      description: "npm audit --production shows 0 vulnerabilities"
+      required: true
+    - name: "Pinned dependency versions"
+      description: "All versions fixed in package-lock.json"
+      required: true
+
+  forbidden_patterns:
+    - "sk-ant-[a-zA-Z0-9]+"
+    - "ghp_[a-zA-Z0-9]{36}"
+    - "-----BEGIN.*KEY-----"
+    - "password\\s*=\\s*['\"].+['\"]"
