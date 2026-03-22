@@ -18,10 +18,11 @@
   "scripts": {
     "preinstall": "npx only-allow npm",
     "prepare": "husky",
-    "build": "npm run build:v1 && npm run build:v2 && npm run build:web",
+    "build": "npm run build:v2",
+    "build:all": "npm run build:v1:sdk && npm run build:v1 && npm run build:v2 && npm run build:web",
     "build:v2": "npm run build:core && npm run build:infrastructure && npm run build:api && npm run build:sdk && npm run build:intelligence && npm run build:integrations && npm run build:agents && npm run build:security && npm run build:ui && npm run build:learning && npm run build:network && npm run build:apps",
     "build:v1": "tsup --config v1-src/tsup.config.ts",
-    "build:v1:sdk": "npm run build -w @teleton-agent/sdk",
+    "build:v1:sdk": "cd packages/sdk-v1 && tsup",
     "build:web": "cd web && npm run build",
     "build:core": "tsup --config packages/core/tsup.config.ts",
     "build:infrastructure": "tsup --config packages/infrastructure/tsup.config.ts",

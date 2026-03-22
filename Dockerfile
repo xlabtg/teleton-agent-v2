@@ -10,12 +10,15 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files and workspace package.json files
+# Copy root package files
 COPY package.json package-lock.json ./
+
+# Copy workspace package.json files (needed for npm ci workspace resolution)
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/sdk-v1/package.json packages/sdk-v1/
+COPY web/package.json web/
 
-# Install all deps (including devDependencies for build)
+# Install all deps (including devDependencies for build + all workspaces)
 RUN npm ci
 
 # Copy source, build configs, and full source
@@ -24,13 +27,10 @@ COPY v1-src/ v1-src/
 COPY packages/ packages/
 COPY apps/ apps/
 COPY configs/ configs/
-
-# Copy frontend source and install its deps
 COPY web/ web/
-RUN cd web && npm ci
 
-# Build everything: V1 backend + V2 packages + frontend
-RUN npm run build
+# Build everything: V1 SDK + V1 backend + V2 packages + frontend
+RUN npm run build:all
 
 # ---- Runtime stage ----
 FROM node:20-slim
