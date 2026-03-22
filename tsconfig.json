@@ -28,7 +28,8 @@
       "@teleton/intelligence/*": ["./packages/intelligence/src/*"],
       "@teleton/integrations/*": ["./packages/integrations/src/*"],
       "@teleton/security/*": ["./packages/security/src/*"],
-      "@teleton/ui/*": ["./packages/ui/src/*"]
+      "@teleton/ui/*": ["./packages/ui/src/*"],
+      "@teleton/network/*": ["./packages/network/src/*"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "__tests__/**/*.ts"],
