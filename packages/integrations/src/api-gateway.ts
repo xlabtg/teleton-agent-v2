@@ -129,9 +129,7 @@ export class ApiGateway {
 
     const credential = this.credentials.get(serviceId);
     if (!adapter.validateCredential(credential)) {
-      throw new ValidationError(
-        `Credential for service "${serviceId}" failed validation.`
-      );
+      throw new ValidationError(`Credential for service "${serviceId}" failed validation.`);
     }
 
     // Run request interceptors.
@@ -142,9 +140,7 @@ export class ApiGateway {
 
     const breaker = this.breakers.get(serviceId)!;
 
-    const rawResponse = await breaker.call(() =>
-      adapter.execute<T>(req, credential)
-    );
+    const rawResponse = await breaker.call(() => adapter.execute<T>(req, credential));
 
     // Run response interceptors.
     let res = rawResponse as ApiResponse;
@@ -166,7 +162,10 @@ export class ApiGateway {
   }
 
   /** Return usage totals aggregated by service. */
-  getUsageSummary(): Record<string, { calls: number; totalDurationMs: number; errorCount: number }> {
+  getUsageSummary(): Record<
+    string,
+    { calls: number; totalDurationMs: number; errorCount: number }
+  > {
     const summary: Record<string, { calls: number; totalDurationMs: number; errorCount: number }> =
       {};
     for (const rec of this.usageLog) {

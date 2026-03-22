@@ -106,10 +106,7 @@ export class EventSchemaRegistry {
         const key = e.path.join(".") || "root";
         (details[key] ??= []).push(e.message);
       }
-      throw new ValidationError(
-        `Payload validation failed for event type "${type}".`,
-        details
-      );
+      throw new ValidationError(`Payload validation failed for event type "${type}".`, details);
     }
   }
 

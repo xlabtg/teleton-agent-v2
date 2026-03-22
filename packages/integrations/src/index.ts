@@ -20,11 +20,7 @@ export { CredentialManager } from "./credential-manager.js";
 export type { CredentialRecord, CredentialManagerConfig } from "./credential-manager.js";
 
 export { CircuitBreaker } from "./circuit-breaker.js";
-export type {
-  CircuitState,
-  CircuitBreakerConfig,
-  CircuitBreakerStats,
-} from "./circuit-breaker.js";
+export type { CircuitState, CircuitBreakerConfig, CircuitBreakerStats } from "./circuit-breaker.js";
 
 // V2-16: Event-Driven Architecture
 export { EventBus } from "./event-bus.js";

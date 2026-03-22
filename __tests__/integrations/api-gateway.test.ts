@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { ApiGateway } from "../../packages/integrations/src/api-gateway.js";
 import { HttpBaseAdapter } from "../../packages/integrations/src/api-adapter.js";
 import { NotFoundError, ValidationError } from "../../packages/core/src/errors/domain-errors.js";
-import type { ApiRequest, ApiResponse, AdapterMeta } from "../../packages/integrations/src/api-adapter.js";
+import type {
+  ApiRequest,
+  ApiResponse,
+  AdapterMeta,
+} from "../../packages/integrations/src/api-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Mock adapter
@@ -23,12 +27,14 @@ class MockAdapter extends HttpBaseAdapter<MockCredential> {
 
   constructor(responseFactory?: (req: ApiRequest) => ApiResponse) {
     super({ baseUrl: "https://mock.example.com" });
-    this._responseFactory = responseFactory ?? (() => ({
-      status: 200,
-      headers: {},
-      body: { ok: true },
-      durationMs: 5,
-    }));
+    this._responseFactory =
+      responseFactory ??
+      (() => ({
+        status: 200,
+        headers: {},
+        body: { ok: true },
+        durationMs: 5,
+      }));
   }
 
   validateCredential(c: MockCredential): boolean {
@@ -76,13 +82,17 @@ describe("ApiGateway", () => {
 
     it("should throw NotFoundError for unregistered service", async () => {
       const gw = new ApiGateway({ credentials: { mock: { apiKey: "key" } } });
-      await expect(gw.execute("unknown", { method: "GET", path: "/" })).rejects.toThrow(NotFoundError);
+      await expect(gw.execute("unknown", { method: "GET", path: "/" })).rejects.toThrow(
+        NotFoundError
+      );
     });
 
     it("should throw ValidationError when credential is invalid", async () => {
       const gw = new ApiGateway({ credentials: { mock: { apiKey: "" } } });
       gw.register(new MockAdapter());
-      await expect(gw.execute("mock", { method: "GET", path: "/" })).rejects.toThrow(ValidationError);
+      await expect(gw.execute("mock", { method: "GET", path: "/" })).rejects.toThrow(
+        ValidationError
+      );
     });
   });
 

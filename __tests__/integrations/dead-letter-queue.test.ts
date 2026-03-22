@@ -3,7 +3,13 @@ import { DeadLetterQueue } from "../../packages/integrations/src/dead-letter-que
 import type { TypedEvent } from "../../packages/integrations/src/event-schema.js";
 
 function makeEvent(id: string): TypedEvent {
-  return { id, type: "test.event", occurredAt: new Date().toISOString(), source: "test", payload: {} };
+  return {
+    id,
+    type: "test.event",
+    occurredAt: new Date().toISOString(),
+    source: "test",
+    payload: {},
+  };
 }
 
 describe("DeadLetterQueue", () => {
@@ -35,7 +41,9 @@ describe("DeadLetterQueue", () => {
     it("should return false on replay failure", async () => {
       const dlq = new DeadLetterQueue();
       const entry = dlq.enqueue(makeEvent("1"), "err");
-      const ok = await dlq.replay(entry.id, async () => { throw new Error("still failing"); });
+      const ok = await dlq.replay(entry.id, async () => {
+        throw new Error("still failing");
+      });
       expect(ok).toBe(false);
     });
 
@@ -59,7 +67,9 @@ describe("DeadLetterQueue", () => {
       const dlq = new DeadLetterQueue({ maxRetries: 1, retryBaseDelayMs: 0 });
       const entry = dlq.enqueue(makeEvent("1"), "err");
       // Manually exhaust retries
-      await dlq.replay(entry.id, async () => { throw new Error(); });
+      await dlq.replay(entry.id, async () => {
+        throw new Error();
+      });
       const { success, failed } = await dlq.retryAll(async () => {});
       expect(success).toBe(0);
       expect(failed).toBe(0); // entry was excluded from retryAll
@@ -70,7 +80,9 @@ describe("DeadLetterQueue", () => {
     it("should list entries that exceeded maxRetries", async () => {
       const dlq = new DeadLetterQueue({ maxRetries: 1, retryBaseDelayMs: 0 });
       const entry = dlq.enqueue(makeEvent("1"), "err");
-      await dlq.replay(entry.id, async () => { throw new Error(); });
+      await dlq.replay(entry.id, async () => {
+        throw new Error();
+      });
       expect(dlq.listPermanentFailures()).toHaveLength(1);
     });
   });

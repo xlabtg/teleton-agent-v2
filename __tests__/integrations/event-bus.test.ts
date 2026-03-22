@@ -13,7 +13,9 @@ describe("EventBus", () => {
     it("should call subscriber when matching event is published", async () => {
       const bus = new EventBus({ store: false, deadLetterQueue: false });
       const received: TypedEvent[] = [];
-      bus.subscribe("user.created", (evt) => { received.push(evt); });
+      bus.subscribe("user.created", (evt) => {
+        received.push(evt);
+      });
       await bus.publish(makeEvent("1", "user.created", { userId: "u1" }));
       expect(received).toHaveLength(1);
       expect(received[0].payload).toEqual({ userId: "u1" });
@@ -30,7 +32,9 @@ describe("EventBus", () => {
     it("wildcard '*' should receive all events", async () => {
       const bus = new EventBus({ store: false, deadLetterQueue: false });
       const received: string[] = [];
-      bus.subscribe("*", (evt) => { received.push(evt.type); });
+      bus.subscribe("*", (evt) => {
+        received.push(evt.type);
+      });
       await bus.publish(makeEvent("1", "user.created"));
       await bus.publish(makeEvent("2", "order.placed"));
       expect(received).toEqual(["user.created", "order.placed"]);
@@ -92,7 +96,13 @@ describe("EventBus", () => {
   describe("dead-letter queue", () => {
     it("should route failed handler errors to DLQ", async () => {
       const bus = new EventBus({ store: false });
-      bus.subscribe("bad.event", async () => { throw new Error("handler error"); }, "bad-handler");
+      bus.subscribe(
+        "bad.event",
+        async () => {
+          throw new Error("handler error");
+        },
+        "bad-handler"
+      );
       await bus.publish(makeEvent("1", "bad.event"));
       expect(bus.dlq?.size).toBe(1);
       expect(bus.dlq?.listPending()[0].errorMessage).toBe("handler error");
@@ -103,11 +113,10 @@ describe("EventBus", () => {
     it("should publish all events in order", async () => {
       const bus = new EventBus({ store: false, deadLetterQueue: false });
       const received: string[] = [];
-      bus.subscribe("t", (evt) => { received.push((evt.payload as { v: string }).v); });
-      await bus.publishBatch([
-        makeEvent("1", "t", { v: "a" }),
-        makeEvent("2", "t", { v: "b" }),
-      ]);
+      bus.subscribe("t", (evt) => {
+        received.push((evt.payload as { v: string }).v);
+      });
+      await bus.publishBatch([makeEvent("1", "t", { v: "a" }), makeEvent("2", "t", { v: "b" })]);
       expect(received).toEqual(["a", "b"]);
     });
   });

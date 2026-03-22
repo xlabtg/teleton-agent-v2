@@ -37,7 +37,11 @@ describe("CircuitBreaker", () => {
   describe("OPEN state", () => {
     it("should throw InfrastructureError when OPEN", async () => {
       const cb = new CircuitBreaker({ failureThreshold: 1, maxRetries: 0, retryBaseDelayMs: 0 });
-      await expect(cb.call(async () => { throw new Error("x"); })).rejects.toThrow();
+      await expect(
+        cb.call(async () => {
+          throw new Error("x");
+        })
+      ).rejects.toThrow();
       expect(cb.currentState).toBe("OPEN");
       await expect(cb.call(async () => 1)).rejects.toThrow(InfrastructureError);
     });
@@ -54,7 +58,11 @@ describe("CircuitBreaker", () => {
         recoveryTimeoutMs: 1_000,
         retryBaseDelayMs: 0,
       });
-      await expect(cb.call(async () => { throw new Error("x"); })).rejects.toThrow();
+      await expect(
+        cb.call(async () => {
+          throw new Error("x");
+        })
+      ).rejects.toThrow();
       expect(cb.currentState).toBe("OPEN");
       vi.setSystemTime(now + 1_001);
       expect(cb.currentState).toBe("HALF_OPEN");
@@ -72,7 +80,11 @@ describe("CircuitBreaker", () => {
         halfOpenSuccessThreshold: 2,
         retryBaseDelayMs: 0,
       });
-      await expect(cb.call(async () => { throw new Error("x"); })).rejects.toThrow();
+      await expect(
+        cb.call(async () => {
+          throw new Error("x");
+        })
+      ).rejects.toThrow();
       // Advance past recovery window so circuit transitions to HALF_OPEN
       vi.setSystemTime(now + 200);
       expect(cb.currentState).toBe("HALF_OPEN");
@@ -88,7 +100,11 @@ describe("CircuitBreaker", () => {
   describe("reset()", () => {
     it("should reset to CLOSED regardless of state", async () => {
       const cb = new CircuitBreaker({ failureThreshold: 1, maxRetries: 0, retryBaseDelayMs: 0 });
-      await expect(cb.call(async () => { throw new Error(); })).rejects.toThrow();
+      await expect(
+        cb.call(async () => {
+          throw new Error();
+        })
+      ).rejects.toThrow();
       expect(cb.currentState).toBe("OPEN");
       cb.reset();
       expect(cb.currentState).toBe("CLOSED");
@@ -99,7 +115,11 @@ describe("CircuitBreaker", () => {
     it("should track total calls and failures", async () => {
       const cb = new CircuitBreaker({ failureThreshold: 10, maxRetries: 0, retryBaseDelayMs: 0 });
       await cb.call(async () => 1);
-      await expect(cb.call(async () => { throw new Error(); })).rejects.toThrow();
+      await expect(
+        cb.call(async () => {
+          throw new Error();
+        })
+      ).rejects.toThrow();
       const stats = cb.stats;
       expect(stats.totalCalls).toBe(2);
       expect(stats.totalFailures).toBe(1);

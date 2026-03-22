@@ -76,7 +76,8 @@ export class EventBus {
   constructor(config: EventBusConfig = {}) {
     this.registry = config.schemaRegistry ?? new EventSchemaRegistry();
     this.store = config.store === false ? null : new EventStore(config.store ?? {});
-    this.dlq = config.deadLetterQueue === false ? null : new DeadLetterQueue(config.deadLetterQueue ?? {});
+    this.dlq =
+      config.deadLetterQueue === false ? null : new DeadLetterQueue(config.deadLetterQueue ?? {});
     this.defaultSource = config.defaultSource ?? "event-bus";
   }
 
@@ -102,7 +103,9 @@ export class EventBus {
     if (!this.subscriptions.has(type)) {
       this.subscriptions.set(type, []);
     }
-    this.subscriptions.get(type)!.push({ token, handlerName: name, handler: handler as EventHandler });
+    this.subscriptions
+      .get(type)!
+      .push({ token, handlerName: name, handler: handler as EventHandler });
     this.tokenIndex.set(token, type);
     return { token, type, handlerName: name };
   }

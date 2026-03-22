@@ -79,9 +79,7 @@ export interface HttpAdapterConfig {
  *   protected buildAuthHeaders(c) { return { Authorization: `Bearer ${c.apiKey}` }; }
  * }
  */
-export abstract class HttpBaseAdapter<TCredential = unknown>
-  implements ApiAdapter<TCredential>
-{
+export abstract class HttpBaseAdapter<TCredential = unknown> implements ApiAdapter<TCredential> {
   abstract readonly meta: AdapterMeta;
 
   protected readonly defaultHeaders: Record<string, string>;
@@ -138,11 +136,7 @@ export abstract class HttpBaseAdapter<TCredential = unknown>
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildUrl(
-  baseUrl: string,
-  path: string,
-  query?: Record<string, string>
-): string {
+function buildUrl(baseUrl: string, path: string, query?: Record<string, string>): string {
   const base = baseUrl.replace(/\/$/, "");
   const normalPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${base}${normalPath}`;
