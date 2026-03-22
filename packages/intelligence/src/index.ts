@@ -1,3 +1,58 @@
+// V2-11: Time-Aware Context Processing
+export { TimeParser } from "./time-parser.js";
+export type { ParsedTime, TimeParserConfig } from "./time-parser.js";
+export { TemporalContext } from "./temporal-context.js";
+export type {
+  TemporalContextItem,
+  TemporalContextConfig,
+  ScoredItem,
+} from "./temporal-context.js";
+export { TimelineBuilder } from "./timeline-builder.js";
+export type {
+  TimelineEvent,
+  EventSource,
+  TimelineBuilderConfig,
+  TimelineGap,
+  TimelineSlice,
+} from "./timeline-builder.js";
+export { UrgencyDetector } from "./urgency-detector.js";
+export type {
+  UrgencyLevel,
+  UrgencySignal,
+  UrgencyDetectorConfig,
+} from "./urgency-detector.js";
+
+// V2-12: Smart Scheduling and Reminders
+export { ScheduleParser } from "./schedule-parser.js";
+export type {
+  RecurrenceRule,
+  ParsedSchedule,
+  ScheduleParserConfig,
+} from "./schedule-parser.js";
+export { ScheduleStore } from "./schedule-store.js";
+export type {
+  ScheduleEntry,
+  ScheduleStatus,
+  CreateScheduleInput,
+  ScheduleStoreConfig,
+  ScheduleConflict,
+} from "./schedule-store.js";
+export { NotificationAdapter } from "./notification-adapter.js";
+export type {
+  NotificationChannel,
+  NotificationPayload,
+  DeliveryResult,
+  ChannelHandler,
+  WebhookChannelConfig,
+  NotificationAdapterConfig,
+} from "./notification-adapter.js";
+export { SmartScheduler } from "./smart-scheduler.js";
+export type {
+  SmartSchedulerConfig,
+  ScheduleRequest,
+  ScheduleRequestResult,
+} from "./smart-scheduler.js";
+
 // V2-04: User Behavior Prediction Engine
 export { BehaviorTracker } from "./behavior-tracker.js";
 export type { BehavioralEvent, ActionType, BehaviorTrackerConfig } from "./behavior-tracker.js";
