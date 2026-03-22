@@ -8,15 +8,9 @@ import type { Message, ToolDefinition } from "../domain/agent.interface.js";
 export interface LLMProvider {
   readonly name: string;
 
-  chat(
-    messages: Message[],
-    options?: LLMChatOptions
-  ): Promise<LLMResponse>;
+  chat(messages: Message[], options?: LLMChatOptions): Promise<LLMResponse>;
 
-  chatStream(
-    messages: Message[],
-    options?: LLMChatOptions
-  ): AsyncIterable<LLMStreamChunk>;
+  chatStream(messages: Message[], options?: LLMChatOptions): AsyncIterable<LLMStreamChunk>;
 }
 
 export interface LLMChatOptions {

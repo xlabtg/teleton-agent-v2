@@ -1,6 +1,9 @@
-export default [
+import tseslint from "typescript-eslint";
+
+export default tseslint.config(
   {
     files: ["**/*.ts", "**/*.tsx"],
+    extends: [tseslint.configs.base],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
@@ -12,5 +15,5 @@ export default [
   },
   {
     ignores: ["dist/", "node_modules/", "coverage/", "web/"],
-  },
-];
+  }
+);

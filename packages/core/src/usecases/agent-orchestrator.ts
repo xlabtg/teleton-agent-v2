@@ -79,11 +79,7 @@ export class AgentOrchestrator {
     const sorted = pending.sort((a, b) => b.priority.weight - a.priority.weight);
 
     for (const task of sorted) {
-      const result = await this.delegate(
-        task.name,
-        task.payload,
-        task.priority
-      );
+      const result = await this.delegate(task.name, task.payload, task.priority);
       results.push(result);
     }
 
@@ -98,9 +94,10 @@ export class AgentOrchestrator {
     if (agents.length === 0) return undefined;
 
     // Prefer orchestrator for complex tasks, executor for simple ones
-    const preferred = task.priority.level === "critical"
-      ? agents.find((a) => a.role === "orchestrator")
-      : agents.find((a) => a.role === "executor");
+    const preferred =
+      task.priority.level === "critical"
+        ? agents.find((a) => a.role === "orchestrator")
+        : agents.find((a) => a.role === "executor");
 
     return preferred ?? agents[0];
   }

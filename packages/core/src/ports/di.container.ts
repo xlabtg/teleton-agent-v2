@@ -4,8 +4,19 @@
  */
 
 import { createContainer, asValue, asClass, type AwilixContainer, InjectionMode } from "awilix";
-import type { LLMProvider, TelegramBridge, TonWallet, SecretsProvider, EmbeddingProvider } from "./service.port.js";
-import type { MemoryRepository, TaskRepository, SessionRepository, EventRepository } from "./repository.port.js";
+import type {
+  LLMProvider,
+  TelegramBridge,
+  TonWallet,
+  SecretsProvider,
+  EmbeddingProvider,
+} from "./service.port.js";
+import type {
+  MemoryRepository,
+  TaskRepository,
+  SessionRepository,
+  EventRepository,
+} from "./repository.port.js";
 import type { EventBus } from "../domain/events.js";
 
 export interface AppConfig {

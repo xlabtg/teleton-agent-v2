@@ -13,7 +13,7 @@ import type {
   ToolDefinition,
   Message,
 } from "../domain/agent.interface.js";
-import type { LLMProvider, LLMChatOptions } from "../ports/service.port.js";
+import type { LLMProvider } from "../ports/service.port.js";
 import type { MemoryRepository, TaskRepository } from "../ports/repository.port.js";
 import type { EventBus } from "../domain/events.js";
 import { AgentExecutionError } from "../errors/domain-errors.js";
@@ -34,7 +34,7 @@ export class AgentRuntime {
 
   constructor(
     private readonly config: AgentRuntimeConfig,
-    private readonly llmProvider: LLMProvider,
+    protected readonly llmProvider: LLMProvider,
     private readonly memoryRepository: MemoryRepository,
     private readonly taskRepository: TaskRepository,
     private readonly eventBus: EventBus
@@ -49,7 +49,7 @@ export class AgentRuntime {
   }
 
   getRegisteredTools(): ToolDefinition[] {
-    return Array.from(this.toolRegistry.entries()).map(([name, executor]) => ({
+    return Array.from(this.toolRegistry.entries()).map(([name, _executor]) => ({
       name,
       description: `Tool: ${name}`,
       parameters: {},
@@ -113,10 +113,7 @@ export class AgentRuntime {
     }
   }
 
-  async processMessage(
-    messages: Message[],
-    agent: IAgent
-  ): Promise<string> {
+  async processMessage(messages: Message[], agent: IAgent): Promise<string> {
     const context: AgentContext = {
       sessionId: crypto.randomUUID(),
       userId: "direct",
@@ -130,10 +127,7 @@ export class AgentRuntime {
     return typeof result === "string" ? result : JSON.stringify(result);
   }
 
-  private async runAgenticLoop(
-    agent: IAgent,
-    context: AgentContext
-  ): Promise<unknown> {
+  private async runAgenticLoop(agent: IAgent, context: AgentContext): Promise<unknown> {
     let iterations = 0;
     let lastResult: unknown = null;
 
@@ -242,7 +236,7 @@ export class AgentRuntime {
     };
   }
 
-  private async buildContext(task: Task, agent: IAgent): Promise<AgentContext> {
+  private async buildContext(task: Task, _agent: IAgent): Promise<AgentContext> {
     const relevantMemories = await this.memoryRepository.search(task.name, 10);
 
     return {
