@@ -4,7 +4,14 @@ import type { DataEntry, DashboardPreferences } from "../../packages/ui/src/dash
 
 function makeEntries(): DataEntry[] {
   return [
-    { key: "revenue", data: [{ month: "Jan", value: 100 }, { month: "Feb", value: 200 }, { month: "Mar", value: 150 }] },
+    {
+      key: "revenue",
+      data: [
+        { month: "Jan", value: 100 },
+        { month: "Feb", value: 200 },
+        { month: "Mar", value: 150 },
+      ],
+    },
     { key: "users", data: 1042 },
     {
       key: "orders",

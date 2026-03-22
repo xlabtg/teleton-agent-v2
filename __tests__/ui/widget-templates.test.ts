@@ -77,9 +77,7 @@ describe("widget-templates", () => {
 
   describe("formTemplate", () => {
     it("creates a form spec with fields", () => {
-      const fields: FormField[] = [
-        { key: "email", label: "Email", type: "text", required: true },
-      ];
+      const fields: FormField[] = [{ key: "email", label: "Email", type: "text", required: true }];
       const spec = formTemplate("f1", "formData", fields);
       expect(spec.kind).toBe("form");
       expect(spec.fields).toEqual(fields);
@@ -99,9 +97,7 @@ describe("widget-templates", () => {
   describe("BASE_DEFAULTS", () => {
     it("all templates include showSkeleton=true", () => {
       expect(tableTemplate("x", "d", []).showSkeleton).toBe(true);
-      expect(chartTemplate("x", "d", "line", { key: "x" }, [{ key: "y" }]).showSkeleton).toBe(
-        true
-      );
+      expect(chartTemplate("x", "d", "line", { key: "x" }, [{ key: "y" }]).showSkeleton).toBe(true);
     });
 
     it("all templates include pageSize=25 by default", () => {

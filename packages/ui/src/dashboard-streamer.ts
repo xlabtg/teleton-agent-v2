@@ -15,11 +15,11 @@ import type { WidgetSpec } from "./widget-templates.js";
 
 /** The type of an update patch. */
 export type PatchKind =
-  | "layout_replaced"  // full layout was regenerated
-  | "widget_added"     // a new widget slot was appended
-  | "widget_removed"   // a widget was removed
-  | "data_updated"     // the data for an existing widget changed
-  | "heartbeat";       // keep-alive with no data change
+  | "layout_replaced" // full layout was regenerated
+  | "widget_added" // a new widget slot was appended
+  | "widget_removed" // a widget was removed
+  | "data_updated" // the data for an existing widget changed
+  | "heartbeat"; // keep-alive with no data change
 
 /** A single patch sent to subscribers. */
 export interface DashboardPatch {
@@ -67,10 +67,7 @@ export interface DashboardStreamerConfig {
  * streamer.destroy();
  */
 export class DashboardStreamer {
-  private readonly handlers = new Map<
-    string,
-    Map<string, PatchHandler>
-  >(); // dashboardId → (token → handler)
+  private readonly handlers = new Map<string, Map<string, PatchHandler>>(); // dashboardId → (token → handler)
   private readonly tokenIndex = new Map<string, string>(); // token → dashboardId
   private readonly buffer = new Map<string, DashboardPatch[]>(); // dashboardId → patches
   private readonly bufferSize: number;

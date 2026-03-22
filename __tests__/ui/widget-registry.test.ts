@@ -11,7 +11,15 @@ describe("WidgetRegistry", () => {
 
     it("has entries for all expected kinds", () => {
       const registry = new WidgetRegistry();
-      for (const kind of ["metric", "card", "list", "table", "chart", "form", "timeline"] as const) {
+      for (const kind of [
+        "metric",
+        "card",
+        "list",
+        "table",
+        "chart",
+        "form",
+        "timeline",
+      ] as const) {
         expect(registry.has(kind)).toBe(true);
       }
     });

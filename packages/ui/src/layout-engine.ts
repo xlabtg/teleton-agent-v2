@@ -167,9 +167,7 @@ export class LayoutEngine {
    */
   private sortByImportance(widgets: WidgetSpec[]): WidgetSpec[] {
     const order: WidgetKind[] = ["metric", "card", "list", "form", "chart", "timeline", "table"];
-    return [...widgets].sort(
-      (a, b) => order.indexOf(a.kind) - order.indexOf(b.kind)
-    );
+    return [...widgets].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   }
 
   /**

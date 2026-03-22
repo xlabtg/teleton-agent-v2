@@ -4,7 +4,13 @@
  * kind and configuration.  No ML — purely structural/statistical heuristics.
  */
 
-import type { WidgetKind, ChartType, TableColumn, ChartAxis, FormField } from "./widget-templates.js";
+import type {
+  WidgetKind,
+  ChartType,
+  TableColumn,
+  ChartAxis,
+  FormField,
+} from "./widget-templates.js";
 
 // ---------------------------------------------------------------------------
 // Analysis result
@@ -189,9 +195,13 @@ export class DataAnalyzer {
     // Profile each key
     const profiles = Object.fromEntries(keys.map((k) => [k, typeProfile(rows, k)]));
 
-    const numericKeys = keys.filter((k) => profiles[k].numeric / rows.length >= this.numericThreshold);
+    const numericKeys = keys.filter(
+      (k) => profiles[k].numeric / rows.length >= this.numericThreshold
+    );
     const dateKeys = keys.filter((k) => profiles[k].date / rows.length >= this.numericThreshold);
-    const stringKeys = keys.filter((k) => profiles[k].string / rows.length >= this.numericThreshold);
+    const stringKeys = keys.filter(
+      (k) => profiles[k].string / rows.length >= this.numericThreshold
+    );
 
     // Timeline: has a date key and a label key
     if (dateKeys.length >= 1 && stringKeys.length >= 1) {

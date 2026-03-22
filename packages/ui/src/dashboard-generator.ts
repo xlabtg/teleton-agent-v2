@@ -9,7 +9,12 @@
  */
 
 import { AutoWidgets, type AutoWidgetHints, type AutoWidgetConfig } from "./auto-widgets.js";
-import { LayoutEngine, type DashboardLayout, type LayoutContext, type LayoutEngineConfig } from "./layout-engine.js";
+import {
+  LayoutEngine,
+  type DashboardLayout,
+  type LayoutContext,
+  type LayoutEngineConfig,
+} from "./layout-engine.js";
 import { WidgetRegistry, type WidgetRegistryConfig } from "./widget-registry.js";
 import { DashboardStreamer, type DashboardStreamerConfig } from "./dashboard-streamer.js";
 import type { WidgetSpec } from "./widget-templates.js";
@@ -98,12 +103,7 @@ export class DashboardGenerator {
     const widgets = this.buildWidgets(entries, prefs);
 
     // Arrange into a grid
-    const layout = this.layoutEngine.arrange(
-      dashboardId,
-      widgets,
-      context,
-      prefs?.title
-    );
+    const layout = this.layoutEngine.arrange(dashboardId, widgets, context, prefs?.title);
 
     // Notify subscribers
     this.streamer.pushLayout(dashboardId, layout);
@@ -114,11 +114,7 @@ export class DashboardGenerator {
   /**
    * Add a single new data entry to an existing dashboard, then re-generate.
    */
-  addEntry(
-    dashboardId: string,
-    currentEntries: DataEntry[],
-    newEntry: DataEntry
-  ): DashboardLayout {
+  addEntry(dashboardId: string, currentEntries: DataEntry[], newEntry: DataEntry): DashboardLayout {
     return this.generate(dashboardId, [...currentEntries, newEntry]);
   }
 

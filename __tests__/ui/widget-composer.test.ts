@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  WidgetComposer,
-  leaf,
-  row,
-  column,
-  grid,
-} from "../../packages/ui/src/widget-composer.js";
+import { WidgetComposer, leaf, row, column, grid } from "../../packages/ui/src/widget-composer.js";
 import { metricTemplate, chartTemplate } from "../../packages/ui/src/widget-templates.js";
 
 const metricSpec = metricTemplate("m1", "kpi", "value");
@@ -71,10 +65,7 @@ describe("WidgetComposer", () => {
 
   describe("WidgetComposer.extractSpecs()", () => {
     it("extracts all leaf specs from a nested tree", () => {
-      const root = row("r", [
-        leaf(metricSpec),
-        column("c", [leaf(chartSpec)]),
-      ]);
+      const root = row("r", [leaf(metricSpec), column("c", [leaf(chartSpec)])]);
       const specs = WidgetComposer.extractSpecs(root);
       expect(specs).toHaveLength(2);
       expect(specs.map((s) => s.id)).toContain("m1");

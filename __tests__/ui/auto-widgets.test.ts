@@ -71,7 +71,14 @@ describe("AutoWidgets", () => {
     it("generates multiple widgets", () => {
       const results = aw.generateBatch([
         { id: "w1", dataKey: "d1", data: 42 },
-        { id: "w2", dataKey: "d2", data: [{ x: 1, y: 2 }, { x: 3, y: 4 }] },
+        {
+          id: "w2",
+          dataKey: "d2",
+          data: [
+            { x: 1, y: 2 },
+            { x: 3, y: 4 },
+          ],
+        },
       ]);
       expect(results).toHaveLength(2);
       expect(results[0].spec.id).toBe("w1");
