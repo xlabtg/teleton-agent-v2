@@ -34,11 +34,7 @@ program
     console.log(`  Node.js: v${nodeVersion} ${major >= 20 ? "✅" : "❌ (requires >= 20)"}`);
 
     // Check environment variables
-    const envVars = [
-      "TELETON_TELEGRAM_API_ID",
-      "TELETON_TELEGRAM_API_HASH",
-      "TELETON_LLM_API_KEY",
-    ];
+    const envVars = ["TELETON_TELEGRAM_API_ID", "TELETON_TELEGRAM_API_HASH", "TELETON_LLM_API_KEY"];
     for (const v of envVars) {
       console.log(`  ${v}: ${process.env[v] ? "✅ set" : "⚠️  not set"}`);
     }

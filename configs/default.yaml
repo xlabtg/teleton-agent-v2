@@ -27,13 +27,13 @@ api:
     - "http://localhost:5173"
 
 security:
-  rate_limit_window: 900000  # 15 minutes in ms
+  rate_limit_window: 900000 # 15 minutes in ms
   rate_limit_max: 100
   # jwt_secret: "" # Set via TELETON_JWT_SECRET env var
 
 agent:
   max_iterations: 20
-  timeout_ms: 120000  # 2 minutes
+  timeout_ms: 120000 # 2 minutes
   personality: |
     You are Teleton, a personal AI agent for Telegram and TON blockchain.
     You help users manage their Telegram accounts and TON wallets.

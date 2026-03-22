@@ -25,12 +25,15 @@ export function createAgentRoutes(): Hono {
     const id = ctx.req.param("id");
     const body = await ctx.req.json();
     // TODO: Wire to AgentOrchestrator.delegate()
-    return ctx.json({
-      taskId: crypto.randomUUID(),
-      agentId: id,
-      status: "queued",
-      task: body,
-    }, 202);
+    return ctx.json(
+      {
+        taskId: crypto.randomUUID(),
+        agentId: id,
+        status: "queued",
+        task: body,
+      },
+      202
+    );
   });
 
   return app;
