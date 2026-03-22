@@ -25,6 +25,8 @@ export interface AnalysisResult {
   inferredFields?: FormField[];
   /** Key in each record that holds the primary label or display text. */
   labelKey?: string;
+  /** Key in each record that holds the timestamp value for timeline widgets. */
+  timestampKey?: string;
   /** Key in each record that holds the primary numeric/KPI value. */
   valueKey?: string;
   /** Confidence score 0–1 for the recommendation. */
@@ -197,6 +199,7 @@ export class DataAnalyzer {
       const labelKey = stringKeys[0];
       return {
         recommendedKind: "timeline",
+        timestampKey,
         labelKey,
         confidence: 0.75,
         inferredColumns: keys.map((k) => inferColumn(k, rows)),
