@@ -15,7 +15,7 @@
   "scripts": {
     "preinstall": "npx only-allow npm",
     "prepare": "husky",
-    "build": "npm run build:core && npm run build:infrastructure && npm run build:api && npm run build:sdk && npm run build:intelligence && npm run build:integrations && npm run build:agents && npm run build:apps",
+    "build": "npm run build:core && npm run build:infrastructure && npm run build:api && npm run build:sdk && npm run build:intelligence && npm run build:integrations && npm run build:agents && npm run build:security && npm run build:apps",
     "build:core": "tsup --config packages/core/tsup.config.ts",
     "build:infrastructure": "tsup --config packages/infrastructure/tsup.config.ts",
     "build:api": "tsup --config packages/api/tsup.config.ts",
@@ -23,6 +23,7 @@
     "build:intelligence": "tsup --config packages/intelligence/tsup.config.ts",
     "build:integrations": "tsup --config packages/integrations/tsup.config.ts",
     "build:agents": "tsup --config packages/agents/tsup.config.ts",
+    "build:security": "tsup --config packages/security/tsup.config.ts",
     "build:apps": "tsup --config apps/agent/tsup.config.ts",
     "dev": "tsx apps/agent/src/index.ts",
     "start": "node dist/apps/agent/index.js",
