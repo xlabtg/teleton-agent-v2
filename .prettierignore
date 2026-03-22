@@ -1,0 +1,12 @@
+node_modules
+dist
+.reference
+docker
+*.log
+*.db
+*.session
+package-lock.json
+v1-src
+v1-docs
+improvements
+web/package-lock.json

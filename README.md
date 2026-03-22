@@ -6,6 +6,8 @@ Autonomous AI Agent for Telegram & TON Blockchain — created by [XLabTG](https:
 
 Teleton V2 is a production-grade autonomous AI agent platform that operates as a real Telegram user account (via MTProto, not a bot), with deep TON blockchain integration, a multi-agent coordination network, and a rich set of V2 features built on clean architecture principles.
 
+This is a **unified repository** that includes everything from V1 ([teleton-agent](https://github.com/xlabtg/teleton-agent)) and V2 in a single self-contained codebase. You can deploy this repository independently — no need to install V1 separately. The WebUI dashboard, setup wizard, CLI, agent management, and all V1 tools are included.
+
 ### Key Capabilities
 
 | Capability                  | Description                                                          |
@@ -124,8 +126,29 @@ apps/
 ├── agent/             # Main application entry point (TeletonApp)
 └── cli/               # CLI interface (Commander)
 
+v1-src/                # V1 source code (fully working V1 agent)
+├── agent/             # V1 agent runtime, tools (Telegram, TON, DeDust, StonFi, etc.)
+├── api/               # V1 management API
+├── bot/               # V1 Telegram bot (deals, inline router)
+├── cli/               # V1 CLI (setup, start, doctor)
+├── config/            # V1 configuration loader & schema
+├── memory/            # V1 memory system (RAG, embeddings, journal)
+├── providers/         # V1 LLM providers (Groq, Claude Code)
+├── services/          # V1 services (analytics, audit, metrics, TTS)
+├── telegram/          # V1 Telegram client & handlers
+├── ton/               # V1 TON wallet & transfers
+├── webui/             # V1 WebUI backend (routes, middleware, setup)
+└── workspace/         # V1 workspace manager
+
+web/                   # V1 WebUI frontend (React + Vite)
+├── src/components/    # Dashboard, setup wizard, agent control
+├── src/pages/         # Dashboard, Config, Hooks, Tools, etc.
+└── src/hooks/         # React hooks (agent status, config, theme)
+
 configs/               # YAML configuration + Zod schemas
-docs/v2-architecture/  # Feature specifications for all V2 features
+config.example.yaml    # V1 example configuration (comprehensive)
+docs/v2-architecture/  # V2 feature specifications
+v1-docs/               # V1 documentation (deployment, plugins, Telegram setup, etc.)
 ```
 
 ---
@@ -143,6 +166,12 @@ docs/v2-architecture/  # Feature specifications for all V2 features
 ---
 
 ## Quick Start
+
+### One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xlabtg/teleton-agent-v2/main/install.sh | bash
+```
 
 ### 1. Clone and install
 
@@ -299,20 +328,16 @@ volumes:
   teleton-data:
 ```
 
-### Via the Web Interface (teleton-agent)
+### Via the Web Interface
 
-The web interface is provided by the upstream [xlabtg/teleton-agent](https://github.com/xlabtg/teleton-agent) project, which ships a full WebUI dashboard for setup and management.
-
-**Install teleton-agent (V1) with WebUI:**
-
-```bash
-npm install -g teleton@latest
-```
+The web interface is included in this repository (ported from V1). No separate installation required.
 
 **Run the setup wizard with WebUI:**
 
 ```bash
-teleton setup --ui
+npm run build
+npm run start:v1 -- --webui
+# or: node dist/cli/index.js setup --ui
 ```
 
 The WebUI wizard at `http://localhost:7777` walks you through:
@@ -329,7 +354,8 @@ Once setup completes, the agent starts automatically.
 **Start with dashboard on subsequent runs:**
 
 ```bash
-teleton start --webui
+npm run start:v1 -- --webui
+# or: node dist/cli/index.js start --webui
 ```
 
 **WebUI configuration** (`~/.teleton/config.yaml`):
@@ -563,13 +589,24 @@ npm install
 ### Available Scripts
 
 ```bash
-npm run dev           # Start in development mode (tsx watch)
-npm run build         # Build all packages with tsup
+# V2 (new architecture)
+npm run dev           # Start V2 in development mode (tsx watch)
+npm run build         # Build everything (V1 + V2 + WebUI)
+npm run build:v2      # Build only V2 packages
+npm run build:v1      # Build only V1 backend
+npm run build:web     # Build only WebUI frontend
 npm test              # Run all tests with Vitest
 npm run typecheck     # TypeScript strict type check (tsc --noEmit)
 npm run lint          # ESLint across all packages
 npm run format:check  # Prettier format check
 npm run doctor        # Run typecheck + lint + test + circular dependency check
+
+# V1 (fully working agent with WebUI)
+npm run dev:v1        # Start V1 agent in development mode
+npm run dev:web       # Start WebUI in development mode (Vite)
+npm run start:v1      # Start V1 agent in production mode
+npm run setup         # Run V1 setup wizard
+npm run doctor:v1     # Run V1 health checks
 ```
 
 ### Running Tests
@@ -606,12 +643,12 @@ Tests are located in `__tests__/` and mirror the `packages/` structure. They use
 docker build -t teleton-agent-v2 .
 ```
 
-The Dockerfile uses a four-stage build:
+The Dockerfile uses a two-stage build:
 
-1. **base** — Node 20 Alpine base image
-2. **dependencies** — production deps only (`npm ci --omit=dev`)
-3. **builder** — full build with dev deps, runs `npm run build`
-4. **runner** — minimal production image, non-root user, `/data` volume
+1. **build** — Node 20 slim, installs all deps, builds V1 + V2 + WebUI
+2. **runtime** — Minimal production image, non-root user, `/data` volume
+
+The container exposes port 7777 (WebUI) and port 3000 (V2 API).
 
 ### Run
 
