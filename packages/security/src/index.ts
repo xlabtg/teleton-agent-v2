@@ -13,11 +13,7 @@ export type { AuditStoreConfig, StoredAuditEvent } from "./audit-store.js";
 export { AuditLogger } from "./audit-logger.js";
 export type { AuditLoggerConfig, AuditLogLevel } from "./audit-logger.js";
 export { AuditQuery } from "./audit-query.js";
-export type {
-  AuditQueryFilter,
-  AuditQueryOptions,
-  AuditQueryResult,
-} from "./audit-query.js";
+export type { AuditQueryFilter, AuditQueryOptions, AuditQueryResult } from "./audit-query.js";
 
 // V2-13: Zero-Trust Input Validation
 export { InputValidator } from "./input-validator.js";
@@ -46,8 +42,4 @@ export type {
   Permission,
 } from "./authorization-middleware.js";
 export { RateLimiter } from "./rate-limiter.js";
-export type {
-  RateLimiterConfig,
-  RateLimitWindow,
-  RateLimitStatus,
-} from "./rate-limiter.js";
+export type { RateLimiterConfig, RateLimitWindow, RateLimitStatus } from "./rate-limiter.js";

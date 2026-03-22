@@ -58,12 +58,21 @@ const BUILTIN_PATTERNS: NamedPattern[] = [
   { name: "new_instructions", pattern: /\bnew\s+instructions?\s*:/i },
   { name: "system_override", pattern: /\bsystem\s*:\s*you\s+are\b/i },
   { name: "jailbreak_dan", pattern: /\bDAN\s+mode\b|\bdo\s+anything\s+now\b/i },
-  { name: "role_override", pattern: /\bact\s+as\s+(if\s+you\s+are|a\s+)?[A-Z][a-z]+\s+without\s+(restrictions?|limits?)/i },
+  {
+    name: "role_override",
+    pattern: /\bact\s+as\s+(if\s+you\s+are|a\s+)?[A-Z][a-z]+\s+without\s+(restrictions?|limits?)/i,
+  },
   { name: "base64_injection", pattern: /\bbase64\b.*\bdecode\b|\bdecode\b.*\bbase64\b/i },
-  { name: "sql_injection", pattern: /('\s*(OR|AND)\s+['"]?\d+['"]?\s*=\s*['"]?\d+['"]?|--\s*$|;\s*DROP\s+TABLE)/i },
+  {
+    name: "sql_injection",
+    pattern: /('\s*(OR|AND)\s+['"]?\d+['"]?\s*=\s*['"]?\d+['"]?|--\s*$|;\s*DROP\s+TABLE)/i,
+  },
   { name: "command_injection", pattern: /[`$](\(|{)|\|{1,2}\s*(bash|sh|cmd|powershell)\b/i },
-  { name: "path_traversal", pattern: /\.\.(\/|\\){1,2}/},
-  { name: "exfiltration_prompt", pattern: /\bsend\s+(all|the)\s+(data|contents?|secrets?|passwords?)\s+(to|via)\b/i },
+  { name: "path_traversal", pattern: /\.\.(\/|\\){1,2}/ },
+  {
+    name: "exfiltration_prompt",
+    pattern: /\bsend\s+(all|the)\s+(data|contents?|secrets?|passwords?)\s+(to|via)\b/i,
+  },
 ];
 
 export class InjectionDetector {
@@ -96,9 +105,8 @@ export class InjectionDetector {
     }
 
     // Pattern stage: any match gives a base score
-    const patternScore = matchedPatterns.length > 0
-      ? Math.min(0.5 + matchedPatterns.length * 0.15, 1.0)
-      : 0;
+    const patternScore =
+      matchedPatterns.length > 0 ? Math.min(0.5 + matchedPatterns.length * 0.15, 1.0) : 0;
 
     // Classifier stage: run only when needed (inconclusive or above quarantine threshold)
     let classifierScore = 0;
@@ -110,9 +118,10 @@ export class InjectionDetector {
     }
 
     const score = Math.max(patternScore, classifierScore);
-    const reason = matchedPatterns.length > 0
-      ? `Matched injection patterns: ${matchedPatterns.join(", ")}`
-      : classifierReason || "No injection signals detected";
+    const reason =
+      matchedPatterns.length > 0
+        ? `Matched injection patterns: ${matchedPatterns.join(", ")}`
+        : classifierReason || "No injection signals detected";
 
     const action = this.classifyAction(score);
 

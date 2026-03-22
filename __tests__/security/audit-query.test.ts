@@ -22,9 +22,29 @@ describe("AuditQuery", () => {
   beforeEach(async () => {
     store = new AuditStore();
     query = new AuditQuery(store);
-    await store.append(makeEvent({ action: "login", category: "authentication", actor: { type: "user", id: "alice" } }));
-    await store.append(makeEvent({ action: "data.read", category: "data_access", actor: { type: "agent", id: "bot-1" } }));
-    await store.append(makeEvent({ action: "login.fail", category: "authentication", outcome: "failure", severity: "error", actor: { type: "user", id: "alice" } }));
+    await store.append(
+      makeEvent({
+        action: "login",
+        category: "authentication",
+        actor: { type: "user", id: "alice" },
+      })
+    );
+    await store.append(
+      makeEvent({
+        action: "data.read",
+        category: "data_access",
+        actor: { type: "agent", id: "bot-1" },
+      })
+    );
+    await store.append(
+      makeEvent({
+        action: "login.fail",
+        category: "authentication",
+        outcome: "failure",
+        severity: "error",
+        actor: { type: "user", id: "alice" },
+      })
+    );
   });
 
   it("returns all events when no filter applied", () => {

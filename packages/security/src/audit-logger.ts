@@ -6,7 +6,13 @@
  */
 
 import type { AuditStore } from "./audit-store.js";
-import type { AuditEvent, AuditActor, AuditCategory, AuditOutcome, AuditSeverity } from "./audit-event.js";
+import type {
+  AuditEvent,
+  AuditActor,
+  AuditCategory,
+  AuditOutcome,
+  AuditSeverity,
+} from "./audit-event.js";
 import { createAuditEvent } from "./audit-event.js";
 
 export type AuditLogLevel = "info" | "warning" | "error" | "critical";

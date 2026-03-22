@@ -104,7 +104,10 @@ export class AuthorizationMiddleware {
         return { allowed: false, reason: `Policy for '${action}' threw an error` };
       }
       if (!policyResult) {
-        return { allowed: false, reason: `Policy denied action '${action}' for actor '${actor.id}'` };
+        return {
+          allowed: false,
+          reason: `Policy denied action '${action}' for actor '${actor.id}'`,
+        };
       }
       if (hasPermission || !this.denyByDefault) {
         return { allowed: true, reason: "Policy and RBAC granted" };

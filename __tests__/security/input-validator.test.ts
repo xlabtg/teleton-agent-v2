@@ -54,6 +54,6 @@ describe("InputValidator", () => {
     // \u00e9 (precomposed é) vs \u0065\u0301 (decomposed e + combining acute)
     const decomposed = "\u0065\u0301";
     const result = v.runSyntaxStage(decomposed);
-    expect((result.annotations["sanitized"] as string)).toBe("\u00e9");
+    expect(result.annotations["sanitized"] as string).toBe("\u00e9");
   });
 });

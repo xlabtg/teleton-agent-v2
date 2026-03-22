@@ -123,9 +123,7 @@ export class AuditStore {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private isExpired(event: StoredAuditEvent, nowMs: number): boolean {
-    const ttl =
-      this.retentionByCategory[event.category] ??
-      this.defaultRetentionMs;
+    const ttl = this.retentionByCategory[event.category] ?? this.defaultRetentionMs;
     if (!ttl) return false;
     return nowMs - new Date(event.timestamp).getTime() > ttl;
   }

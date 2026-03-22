@@ -88,8 +88,8 @@ describe("RateLimiter", () => {
     const now = Date.now();
     const rl = new RateLimiter({
       windows: [
-        { windowMs: 1_000, maxRequests: 5 },   // 5/sec
-        { windowMs: 60_000, maxRequests: 10 },  // 10/min
+        { windowMs: 1_000, maxRequests: 5 }, // 5/sec
+        { windowMs: 60_000, maxRequests: 10 }, // 10/min
       ],
     });
     // Exhaust the per-minute window without hitting per-second

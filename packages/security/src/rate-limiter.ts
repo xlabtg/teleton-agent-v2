@@ -48,7 +48,7 @@ interface WindowState {
 }
 
 interface BanState {
-  violations: number[];  // timestamps
+  violations: number[]; // timestamps
   bannedUntil?: number;
 }
 
