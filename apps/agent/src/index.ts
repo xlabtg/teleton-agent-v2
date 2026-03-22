@@ -9,13 +9,20 @@ import { parse as parseYaml } from "yaml";
 import { createAppContainer, type AppConfig } from "@teleton/core/ports/di.container.js";
 import { AgentRuntime } from "@teleton/core/usecases/agent-runtime.js";
 import { AgentOrchestrator } from "@teleton/core/usecases/agent-orchestrator.js";
-import { SQLiteMemoryRepository, SQLiteTaskRepository } from "@teleton/infrastructure/database/sqlite.adapter.js";
+import {
+  SQLiteMemoryRepository,
+  SQLiteTaskRepository,
+} from "@teleton/infrastructure/database/sqlite.adapter.js";
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
 import { createServer } from "@teleton/api/server.js";
 import { appConfigSchema } from "../../../configs/config.schema.js";
 
 export class TeletonApp {
   private running = false;
+
+  isRunning(): boolean {
+    return this.running;
+  }
 
   async start(configPath?: string): Promise<void> {
     console.log("🚀 Starting Teleton Agent V2...\n");
@@ -25,7 +32,7 @@ export class TeletonApp {
     console.log("✅ Configuration loaded");
 
     // 2. Create DI container
-    const container = createAppContainer(config);
+    createAppContainer(config);
     console.log("✅ DI container created");
 
     // 3. Initialize infrastructure
@@ -48,11 +55,11 @@ export class TeletonApp {
       eventBus
     );
 
-    const orchestrator = new AgentOrchestrator(runtime, taskRepo, eventBus);
+    new AgentOrchestrator(runtime, taskRepo, eventBus);
     console.log("✅ Agent runtime created");
 
     // 5. Start API server
-    const server = createServer({
+    createServer({
       port: config.api.port,
       host: config.api.host,
       auth: {

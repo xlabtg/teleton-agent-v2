@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AgentOrchestrator } from "../../packages/core/src/usecases/agent-orchestrator.js";
 import { AgentRuntime } from "../../packages/core/src/usecases/agent-runtime.js";
-import type { IAgent, Task, TaskResult } from "../../packages/core/src/domain/agent.interface.js";
+import type { IAgent, Task } from "../../packages/core/src/domain/agent.interface.js";
 import type { TaskRepository } from "../../packages/core/src/ports/repository.port.js";
 import type { EventBus } from "../../packages/core/src/domain/events.js";
 
@@ -131,9 +131,7 @@ describe("AgentOrchestrator", () => {
 
     await orchestrator.delegate("test-task", { data: "test" });
 
-    expect(taskRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "test-task" })
-    );
+    expect(taskRepo.create).toHaveBeenCalledWith(expect.objectContaining({ name: "test-task" }));
     expect(eventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({ type: "task.created" })
     );
