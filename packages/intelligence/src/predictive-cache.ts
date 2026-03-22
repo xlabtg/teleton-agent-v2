@@ -34,7 +34,7 @@ export class PredictiveCache {
   constructor(
     private readonly keyGenerator: CacheKeyGenerator,
     private readonly metrics: CacheMetrics,
-    config: PredictiveCacheConfig = {},
+    config: PredictiveCacheConfig = {}
   ) {
     this.defaultTtlMs = config.defaultTtlMs ?? 5 * 60 * 1000; // 5 minutes
   }
@@ -69,12 +69,7 @@ export class PredictiveCache {
    * @param ttlMs   Optional per-entry TTL override.
    * @param fromWarming  Mark the entry as pre-warmed (used in metrics).
    */
-  async set(
-    query: string,
-    response: string,
-    ttlMs?: number,
-    fromWarming = false,
-  ): Promise<void> {
+  async set(query: string, response: string, ttlMs?: number, fromWarming = false): Promise<void> {
     const key = await this.keyGenerator.getKey(query);
     const now = new Date();
     const ttl = ttlMs ?? this.defaultTtlMs;

@@ -50,7 +50,7 @@ export class AnomalyDetector {
     private readonly baselineProfiler: BaselineProfiler,
     private readonly alertRouter: AlertRouter,
     private readonly contextBuilder: InvestigationContextBuilder,
-    config: AnomalyDetectorConfig = {},
+    config: AnomalyDetectorConfig = {}
   ) {
     this.zScoreThreshold = config.zScoreThreshold ?? 3.0;
     this.iqrMultiplier = config.iqrMultiplier ?? 1.5;
@@ -120,11 +120,7 @@ export class AnomalyDetector {
    * Classify severity based on how many standard deviations the value is
    * from the baseline mean. Falls back to "medium" when stdDev is zero.
    */
-  private classifySeverity(
-    value: number,
-    mean: number,
-    stdDev: number,
-  ): AlertSeverity {
+  private classifySeverity(value: number, mean: number, stdDev: number): AlertSeverity {
     if (stdDev === 0) return "medium";
     const sigma = Math.abs((value - mean) / stdDev);
     if (sigma >= 6) return "critical";

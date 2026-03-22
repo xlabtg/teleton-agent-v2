@@ -48,7 +48,7 @@ export class PredictionEngine {
     private readonly behaviorTracker: BehaviorTracker,
     private readonly patternMiner: PatternMiner,
     private readonly evaluator: PredictionEvaluator,
-    config: PredictionEngineConfig = {},
+    config: PredictionEngineConfig = {}
   ) {
     this.confidenceThreshold = config.confidenceThreshold ?? 0.4;
     this.maxPredictions = config.maxPredictions ?? 3;
@@ -67,9 +67,7 @@ export class PredictionEngine {
     if (events.length === 0) return [];
 
     const patterns = this.patternMiner.mine(events);
-    const context = events
-      .slice(-this.contextWindowSize)
-      .map((e) => e.action);
+    const context = events.slice(-this.contextWindowSize).map((e) => e.action);
 
     const candidates = this.findMatchingPredictions(patterns, context);
 
@@ -86,7 +84,7 @@ export class PredictionEngine {
   predictAndTrack(userId: string): { predictions: Prediction[]; trackingIds: string[] } {
     const predictions = this.predict(userId);
     const trackingIds = predictions.map((p) =>
-      this.evaluator.record(userId, p.action, p.confidence),
+      this.evaluator.record(userId, p.action, p.confidence)
     );
     return { predictions, trackingIds };
   }
@@ -108,10 +106,7 @@ export class PredictionEngine {
    *
    * A pattern [A, B, C] matches a context tail [A, B] and predicts C.
    */
-  private findMatchingPredictions(
-    patterns: ActionPattern[],
-    context: ActionType[],
-  ): Prediction[] {
+  private findMatchingPredictions(patterns: ActionPattern[], context: ActionType[]): Prediction[] {
     // Map from predicted action → best candidate (highest confidence)
     const best = new Map<ActionType, Prediction>();
 

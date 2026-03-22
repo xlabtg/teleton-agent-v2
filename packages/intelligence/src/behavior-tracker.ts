@@ -79,9 +79,7 @@ export class BehaviorTracker {
    * Return events for a user within a time window.
    */
   getEventsInWindow(userId: string, since: Date, until: Date = new Date()): BehavioralEvent[] {
-    return this.getEvents(userId).filter(
-      (e) => e.timestamp >= since && e.timestamp <= until,
-    );
+    return this.getEvents(userId).filter((e) => e.timestamp >= since && e.timestamp <= until);
   }
 
   /**

@@ -14,10 +14,12 @@ function createMockEmbeddingProvider(): EmbeddingProvider {
       return [Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)];
     }),
     embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
-      return Promise.all(texts.map(async (t) => {
-        const hash = Array.from(t).reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        return [Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)];
-      }));
+      return Promise.all(
+        texts.map(async (t) => {
+          const hash = Array.from(t).reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          return [Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)];
+        })
+      );
     }),
     dimensions: vi.fn().mockReturnValue(3),
   };

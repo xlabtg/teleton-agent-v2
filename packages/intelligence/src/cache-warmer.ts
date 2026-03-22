@@ -31,7 +31,7 @@ export class CacheWarmer {
   constructor(
     private readonly predictionEngine: PredictionEngine,
     private readonly cache: PredictiveCache,
-    config: CacheWarmerConfig = {},
+    config: CacheWarmerConfig = {}
   ) {
     this.minConfidence = config.minConfidence ?? 0.5;
   }

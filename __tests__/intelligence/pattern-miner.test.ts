@@ -33,7 +33,7 @@ describe("PatternMiner", () => {
     ];
     const patterns = miner.mine(events);
     const found = patterns.find(
-      (p) => p.sequence[0] === "message_sent" && p.sequence[1] === "query_submitted",
+      (p) => p.sequence[0] === "message_sent" && p.sequence[1] === "query_submitted"
     );
     expect(found).toBeDefined();
     expect(found!.support).toBeGreaterThanOrEqual(2);

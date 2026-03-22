@@ -81,8 +81,20 @@ describe("AlertRouter", () => {
     const handler = vi.fn();
     router.register(handler);
 
-    await router.emit({ metric: "cpu", severity: "medium", message: "High CPU", value: 95, threshold: 80 });
-    await router.emit({ metric: "cpu", severity: "medium", message: "High CPU", value: 97, threshold: 80 });
+    await router.emit({
+      metric: "cpu",
+      severity: "medium",
+      message: "High CPU",
+      value: 95,
+      threshold: 80,
+    });
+    await router.emit({
+      metric: "cpu",
+      severity: "medium",
+      message: "High CPU",
+      value: 97,
+      threshold: 80,
+    });
 
     // Second alert should be suppressed
     expect(handler).toHaveBeenCalledOnce();
@@ -90,8 +102,20 @@ describe("AlertRouter", () => {
 
   it("should store alert history", async () => {
     const router = new AlertRouter({ deduplicationWindowMs: 0 });
-    await router.emit({ metric: "errors", severity: "low", message: "Minor", value: 5, threshold: 3 });
-    await router.emit({ metric: "latency", severity: "high", message: "Spike", value: 500, threshold: 100 });
+    await router.emit({
+      metric: "errors",
+      severity: "low",
+      message: "Minor",
+      value: 5,
+      threshold: 3,
+    });
+    await router.emit({
+      metric: "latency",
+      severity: "high",
+      message: "Spike",
+      value: 500,
+      threshold: 100,
+    });
 
     const history = router.getHistory();
     expect(history.length).toBe(2);
@@ -101,8 +125,20 @@ describe("AlertRouter", () => {
 
   it("should filter history by metric", async () => {
     const router = new AlertRouter({ deduplicationWindowMs: 0 });
-    await router.emit({ metric: "errors", severity: "low", message: "Minor", value: 5, threshold: 3 });
-    await router.emit({ metric: "latency", severity: "high", message: "Spike", value: 500, threshold: 100 });
+    await router.emit({
+      metric: "errors",
+      severity: "low",
+      message: "Minor",
+      value: 5,
+      threshold: 3,
+    });
+    await router.emit({
+      metric: "latency",
+      severity: "high",
+      message: "Spike",
+      value: 500,
+      threshold: 100,
+    });
 
     const latencyHistory = router.getHistory("latency");
     expect(latencyHistory).toHaveLength(1);

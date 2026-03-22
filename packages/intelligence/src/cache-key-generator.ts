@@ -36,7 +36,7 @@ export class CacheKeyGenerator {
 
   constructor(
     private readonly embeddingProvider: EmbeddingProvider,
-    config: CacheKeyGeneratorConfig = {},
+    config: CacheKeyGeneratorConfig = {}
   ) {
     this.similarityThreshold = config.similarityThreshold ?? 0.92;
   }

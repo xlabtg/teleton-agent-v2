@@ -70,14 +70,13 @@ export class PredictionEvaluator {
    */
   summarize(userId?: string): EvaluationSummary {
     const allRecords = Array.from(this.records.values()).filter(
-      (r) => !userId || r.userId === userId,
+      (r) => !userId || r.userId === userId
     );
 
     const resolved = allRecords.filter((r) => r.resolvedAt !== undefined);
     const correct = resolved.filter((r) => r.correct === true);
 
-    const precision =
-      resolved.length > 0 ? correct.length / resolved.length : 0;
+    const precision = resolved.length > 0 ? correct.length / resolved.length : 0;
 
     return {
       totalPredictions: allRecords.length,
@@ -93,7 +92,7 @@ export class PredictionEvaluator {
    */
   getPendingPredictions(userId: string): PredictionRecord[] {
     return Array.from(this.records.values()).filter(
-      (r) => r.userId === userId && r.resolvedAt === undefined,
+      (r) => r.userId === userId && r.resolvedAt === undefined
     );
   }
 

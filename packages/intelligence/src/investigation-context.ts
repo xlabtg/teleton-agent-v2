@@ -59,14 +59,10 @@ export class InvestigationContextBuilder {
    * Build an investigation context for an alert.
    */
   build(alert: Alert, baseline: BaselineStats | null): InvestigationContext {
-    const recentSamples = (this.samples.get(alert.metric) ?? []).slice(
-      -this.sampleLookback,
-    );
+    const recentSamples = (this.samples.get(alert.metric) ?? []).slice(-this.sampleLookback);
 
     const zScore =
-      baseline && baseline.stdDev > 0
-        ? (alert.value - baseline.mean) / baseline.stdDev
-        : null;
+      baseline && baseline.stdDev > 0 ? (alert.value - baseline.mean) / baseline.stdDev : null;
 
     const summary = this.buildSummary(alert, baseline, zScore);
 
@@ -83,7 +79,7 @@ export class InvestigationContextBuilder {
   private buildSummary(
     alert: Alert,
     baseline: BaselineStats | null,
-    zScore: number | null,
+    zScore: number | null
   ): string {
     const parts: string[] = [
       `[${alert.severity.toUpperCase()}] Anomaly on metric "${alert.metric}".`,
@@ -93,7 +89,7 @@ export class InvestigationContextBuilder {
     if (baseline) {
       parts.push(
         `Baseline mean: ${baseline.mean.toFixed(4)}, ` +
-          `stdDev: ${baseline.stdDev.toFixed(4)} (${baseline.sampleCount} samples).`,
+          `stdDev: ${baseline.stdDev.toFixed(4)} (${baseline.sampleCount} samples).`
       );
     }
 
