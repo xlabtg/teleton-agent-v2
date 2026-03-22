@@ -24,7 +24,8 @@
       "@teleton/infrastructure/*": ["./packages/infrastructure/src/*"],
       "@teleton/api/*": ["./packages/api/src/*"],
       "@teleton/sdk/*": ["./packages/sdk/src/*"],
-      "@teleton/memory/*": ["./packages/memory/src/*"]
+      "@teleton/memory/*": ["./packages/memory/src/*"],
+      "@teleton/intelligence/*": ["./packages/intelligence/src/*"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "__tests__/**/*.ts"],
