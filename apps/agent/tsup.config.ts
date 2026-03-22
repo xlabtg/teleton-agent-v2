@@ -6,10 +6,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   outDir: "dist/apps/agent",
-  external: [
-    "@teleton/core",
-    "@teleton/infrastructure",
-    "@teleton/api",
-    "@teleton/sdk",
-  ],
+  external: ["@teleton/core", "@teleton/infrastructure", "@teleton/api", "@teleton/sdk"],
 });
