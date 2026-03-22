@@ -6,7 +6,17 @@ docker
 *.db
 *.session
 package-lock.json
+
+# V1 files (imported from teleton-agent, have different formatting)
 v1-src
 v1-docs
 improvements
-web/package-lock.json
+web
+packages/sdk-v1
+config.example.yaml
+CHANGELOG.md
+CONTRIBUTING.md
+GETTING_STARTED.md
+SECURITY.md
+logo_dark.png
+logo_light.png
