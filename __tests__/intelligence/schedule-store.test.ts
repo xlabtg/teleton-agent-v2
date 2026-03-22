@@ -35,8 +35,16 @@ describe("ScheduleStore", () => {
   });
 
   it("getDue() should return entries with triggerAt ≤ asOf", () => {
-    const past = store.create({ userId: "u1", action: "past", triggerAt: T("2024-06-14T00:00:00Z") });
-    const future = store.create({ userId: "u1", action: "future", triggerAt: T("2024-06-20T00:00:00Z") });
+    const past = store.create({
+      userId: "u1",
+      action: "past",
+      triggerAt: T("2024-06-14T00:00:00Z"),
+    });
+    const future = store.create({
+      userId: "u1",
+      action: "future",
+      triggerAt: T("2024-06-20T00:00:00Z"),
+    });
     const due = store.getDue(T("2024-06-15T12:00:00Z"));
     expect(due.map((e) => e.id)).toContain(past.id);
     expect(due.map((e) => e.id)).not.toContain(future.id);

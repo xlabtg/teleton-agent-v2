@@ -123,7 +123,9 @@ export class ScheduleStore {
   /** Update fields on an existing entry. */
   update(
     id: string,
-    patch: Partial<Pick<ScheduleEntry, "triggerAt" | "recurrence" | "action" | "status" | "tags" | "metadata">>
+    patch: Partial<
+      Pick<ScheduleEntry, "triggerAt" | "recurrence" | "action" | "status" | "tags" | "metadata">
+    >
   ): ScheduleEntry {
     const entry = this.entries.get(id);
     if (!entry) throw new Error(`Schedule entry not found: ${id}`);
@@ -151,9 +153,7 @@ export class ScheduleStore {
 
   /** Return all pending entries for a user, sorted by triggerAt ascending. */
   listForUser(userId: string): ScheduleEntry[] {
-    return this._sortedBy("triggerAt").filter(
-      (e) => e.userId === userId && e.status === "pending"
-    );
+    return this._sortedBy("triggerAt").filter((e) => e.userId === userId && e.status === "pending");
   }
 
   /**
@@ -210,10 +210,7 @@ export class ScheduleStore {
    * Detect existing entries that overlap within `windowMs` of the incoming
    * schedule's trigger time. Default window: 5 minutes on each side.
    */
-  detectConflicts(
-    incoming: CreateScheduleInput,
-    windowMs = 5 * 60_000
-  ): ScheduleConflict[] {
+  detectConflicts(incoming: CreateScheduleInput, windowMs = 5 * 60_000): ScheduleConflict[] {
     const incomingTs = incoming.triggerAt.getTime();
     const conflicts: ScheduleConflict[] = [];
 

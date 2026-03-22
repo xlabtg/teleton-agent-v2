@@ -2,11 +2,7 @@
 export { TimeParser } from "./time-parser.js";
 export type { ParsedTime, TimeParserConfig } from "./time-parser.js";
 export { TemporalContext } from "./temporal-context.js";
-export type {
-  TemporalContextItem,
-  TemporalContextConfig,
-  ScoredItem,
-} from "./temporal-context.js";
+export type { TemporalContextItem, TemporalContextConfig, ScoredItem } from "./temporal-context.js";
 export { TimelineBuilder } from "./timeline-builder.js";
 export type {
   TimelineEvent,
@@ -16,19 +12,11 @@ export type {
   TimelineSlice,
 } from "./timeline-builder.js";
 export { UrgencyDetector } from "./urgency-detector.js";
-export type {
-  UrgencyLevel,
-  UrgencySignal,
-  UrgencyDetectorConfig,
-} from "./urgency-detector.js";
+export type { UrgencyLevel, UrgencySignal, UrgencyDetectorConfig } from "./urgency-detector.js";
 
 // V2-12: Smart Scheduling and Reminders
 export { ScheduleParser } from "./schedule-parser.js";
-export type {
-  RecurrenceRule,
-  ParsedSchedule,
-  ScheduleParserConfig,
-} from "./schedule-parser.js";
+export type { RecurrenceRule, ParsedSchedule, ScheduleParserConfig } from "./schedule-parser.js";
 export { ScheduleStore } from "./schedule-store.js";
 export type {
   ScheduleEntry,

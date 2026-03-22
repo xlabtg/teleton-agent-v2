@@ -176,8 +176,9 @@ export class UrgencyDetector {
    */
   highestLevel(signals: UrgencySignal[]): UrgencyLevel {
     if (signals.length === 0) return "low";
-    return signals.reduce<UrgencySignal>((best, s) =>
-      this._levelRank(s.level) < this._levelRank(best.level) ? s : best
+    return signals.reduce<UrgencySignal>(
+      (best, s) => (this._levelRank(s.level) < this._levelRank(best.level) ? s : best),
+      signals[0]
     ).level;
   }
 
@@ -204,10 +205,14 @@ export class UrgencyDetector {
   /** Lower rank = higher urgency. */
   private _levelRank(level: UrgencyLevel): number {
     switch (level) {
-      case "critical": return 0;
-      case "high": return 1;
-      case "normal": return 2;
-      case "low": return 3;
+      case "critical":
+        return 0;
+      case "high":
+        return 1;
+      case "normal":
+        return 2;
+      case "low":
+        return 3;
     }
   }
 }

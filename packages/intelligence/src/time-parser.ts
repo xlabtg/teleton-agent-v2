@@ -26,24 +26,20 @@ export interface TimeParserConfig {
 // Regex catalogue
 // ---------------------------------------------------------------------------
 
-const RELATIVE_UNIT_RE =
-  /\bin\s+(\d+)\s+(second|minute|hour|day|week|month|year)s?\b/i;
+const RELATIVE_UNIT_RE = /\bin\s+(\d+)\s+(second|minute|hour|day|week|month|year)s?\b/i;
 
-const AGO_UNIT_RE =
-  /\b(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago\b/i;
+const AGO_UNIT_RE = /\b(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago\b/i;
 
 const NAMED_RELATIVE_RE =
   /\b(now|today|tomorrow|yesterday|next\s+week|last\s+week|next\s+month|last\s+month|next\s+year|last\s+year)\b/i;
 
 const TIME_OF_DAY_RE = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
 
-const WEEKDAY_RE =
-  /\b(next|last)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+const WEEKDAY_RE = /\b(next|last)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 
 const ISO_DATE_RE = /\b(\d{4}[-/]\d{2}[-/]\d{2})\b/;
 
-const COMPACT_DATE_RE =
-  /\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b/;
+const COMPACT_DATE_RE = /\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b/;
 
 const MONTH_NAME_RE =
   /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/i;
@@ -132,11 +128,9 @@ function prevWeekday(from: Date, targetDay: number): Date {
  */
 export class TimeParser {
   private readonly ref: Date;
-  private readonly utcOffsetMs: number;
 
   constructor(config: TimeParserConfig = {}) {
     this.ref = config.referenceDate ?? new Date();
-    this.utcOffsetMs = (config.userUtcOffsetMinutes ?? 0) * 60_000;
   }
 
   /** Return the reference "now" this parser uses. */
@@ -177,7 +171,12 @@ export class TimeParser {
       const term = namedMatch[1].toLowerCase().replace(/\s+/g, " ");
       const date = this._resolveNamed(term, normalised);
       if (date) {
-        return { kind: "relative", date, raw: normalised, offsetMs: date.getTime() - this.ref.getTime() };
+        return {
+          kind: "relative",
+          date,
+          raw: normalised,
+          offsetMs: date.getTime() - this.ref.getTime(),
+        };
       }
     }
 
@@ -205,7 +204,10 @@ export class TimeParser {
     // 5. ISO / compact dates
     const isoMatch = normalised.match(ISO_DATE_RE);
     if (isoMatch) {
-      const date = applyTimeOfDay(new Date(isoMatch[1].replace(/\//g, "-") + "T00:00:00Z"), normalised);
+      const date = applyTimeOfDay(
+        new Date(isoMatch[1].replace(/\//g, "-") + "T00:00:00Z"),
+        normalised
+      );
       return { kind: "absolute", date, raw: normalised };
     }
 
@@ -214,13 +216,8 @@ export class TimeParser {
     if (monthMatch) {
       const month = MONTH_INDEX[monthMatch[1].toLowerCase()];
       const day = parseInt(monthMatch[2], 10);
-      const year = monthMatch[3]
-        ? parseInt(monthMatch[3], 10)
-        : this.ref.getUTCFullYear();
-      const date = applyTimeOfDay(
-        new Date(Date.UTC(year, month, day)),
-        normalised
-      );
+      const year = monthMatch[3] ? parseInt(monthMatch[3], 10) : this.ref.getUTCFullYear();
+      const date = applyTimeOfDay(new Date(Date.UTC(year, month, day)), normalised);
       return { kind: "absolute", date, raw: normalised };
     }
 
@@ -237,10 +234,17 @@ export class TimeParser {
       const valid1 = !isNaN(candidate1.getTime()) && candidate1.getUTCMonth() === a - 1;
       const valid2 = !isNaN(candidate2.getTime()) && candidate2.getUTCMonth() === b - 1;
       if (valid1 && valid2 && a !== b) {
-        return { kind: "ambiguous", candidates: [candidate1, candidate2], raw: normalised, needsClarification: true };
+        return {
+          kind: "ambiguous",
+          candidates: [candidate1, candidate2],
+          raw: normalised,
+          needsClarification: true,
+        };
       }
-      if (valid1) return { kind: "absolute", date: applyTimeOfDay(candidate1, normalised), raw: normalised };
-      if (valid2) return { kind: "absolute", date: applyTimeOfDay(candidate2, normalised), raw: normalised };
+      if (valid1)
+        return { kind: "absolute", date: applyTimeOfDay(candidate1, normalised), raw: normalised };
+      if (valid2)
+        return { kind: "absolute", date: applyTimeOfDay(candidate2, normalised), raw: normalised };
     }
 
     return { kind: "unrecognized", raw: normalised };

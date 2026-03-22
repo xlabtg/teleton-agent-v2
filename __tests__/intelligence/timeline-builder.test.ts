@@ -11,16 +11,28 @@ describe("TimelineBuilder", () => {
   });
 
   it("should add events and maintain chronological order", () => {
-    builder.addEvent({ description: "C", timestamp: T("2024-01-03T00:00:00Z"), source: "conversation" });
-    builder.addEvent({ description: "A", timestamp: T("2024-01-01T00:00:00Z"), source: "conversation" });
-    builder.addEvent({ description: "B", timestamp: T("2024-01-02T00:00:00Z"), source: "conversation" });
+    builder.addEvent({
+      description: "C",
+      timestamp: T("2024-01-03T00:00:00Z"),
+      source: "conversation",
+    });
+    builder.addEvent({
+      description: "A",
+      timestamp: T("2024-01-01T00:00:00Z"),
+      source: "conversation",
+    });
+    builder.addEvent({
+      description: "B",
+      timestamp: T("2024-01-02T00:00:00Z"),
+      source: "conversation",
+    });
 
     const all = builder.all();
     expect(all.map((e) => e.description)).toEqual(["A", "B", "C"]);
   });
 
   it("should replace an existing event with the same id", () => {
-    const ev = builder.addEvent({
+    builder.addEvent({
       id: "evt-1",
       description: "Original",
       timestamp: T("2024-01-01T00:00:00Z"),
@@ -48,7 +60,11 @@ describe("TimelineBuilder", () => {
 
   it("should filter by source in query", () => {
     builder.addEvent({ description: "m1", timestamp: T("2024-01-01T00:00:00Z"), source: "memory" });
-    builder.addEvent({ description: "c1", timestamp: T("2024-01-02T00:00:00Z"), source: "conversation" });
+    builder.addEvent({
+      description: "c1",
+      timestamp: T("2024-01-02T00:00:00Z"),
+      source: "conversation",
+    });
     const { events } = builder.query({ source: "memory" });
     expect(events).toHaveLength(1);
     expect(events[0].description).toBe("m1");
@@ -73,9 +89,21 @@ describe("TimelineBuilder", () => {
   });
 
   it("should filter by since/until", () => {
-    builder.addEvent({ description: "early", timestamp: T("2024-01-01T00:00:00Z"), source: "conversation" });
-    builder.addEvent({ description: "middle", timestamp: T("2024-01-05T00:00:00Z"), source: "conversation" });
-    builder.addEvent({ description: "late", timestamp: T("2024-01-10T00:00:00Z"), source: "conversation" });
+    builder.addEvent({
+      description: "early",
+      timestamp: T("2024-01-01T00:00:00Z"),
+      source: "conversation",
+    });
+    builder.addEvent({
+      description: "middle",
+      timestamp: T("2024-01-05T00:00:00Z"),
+      source: "conversation",
+    });
+    builder.addEvent({
+      description: "late",
+      timestamp: T("2024-01-10T00:00:00Z"),
+      source: "conversation",
+    });
 
     const { events } = builder.query({
       since: T("2024-01-03T00:00:00Z"),

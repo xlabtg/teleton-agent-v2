@@ -42,8 +42,7 @@ export interface ScheduleParserConfig {
 // Patterns
 // ---------------------------------------------------------------------------
 
-const INTENT_RE =
-  /\b(remind\s+me|schedule|set\s+(?:a\s+)?reminder|alert\s+me|notify\s+me)\b/i;
+const INTENT_RE = /\b(remind\s+me|schedule|set\s+(?:a\s+)?reminder|alert\s+me|notify\s+me)\b/i;
 
 const RECURRENCE_PATTERNS: Array<{
   re: RegExp;
@@ -85,12 +84,6 @@ const RECURRENCE_PATTERNS: Array<{
 
 const ACTION_STRIP_RE =
   /\b(remind\s+me|schedule|set\s+(?:a\s+)?reminder|alert\s+me|notify\s+me)\b/gi;
-
-const TIME_STRIP_PATTERNS = [
-  /\b(in\s+\d+\s+\w+|tomorrow|today|tonight|next\s+\w+|last\s+\w+|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/gi,
-  /\b(every\s+day|every\s+\d+\s+days?|daily|every\s+week|weekly|every\s+\d+\s+weeks?|every\s+month|monthly)\b/gi,
-  /\bto\b/i,
-];
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -143,7 +136,10 @@ export class ScheduleParser {
     const recurrence = this._parseRecurrence(text);
 
     // Derive the action description by removing intent + time words
-    const action = this._extractAction(text, timeExtractions.map((e) => e.match));
+    const action = this._extractAction(
+      text,
+      timeExtractions.map((e) => e.match)
+    );
 
     // Confidence: penalise if we have no intent keyword or no time expression
     let confidence = 1.0;

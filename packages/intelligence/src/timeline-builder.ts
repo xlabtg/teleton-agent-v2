@@ -147,9 +147,7 @@ export class TimelineBuilder {
       filtered = filtered.filter((e) => e.source === options.source);
     }
     if (options.tags && options.tags.length > 0) {
-      filtered = filtered.filter((e) =>
-        options.tags!.every((t) => e.tags?.includes(t))
-      );
+      filtered = filtered.filter((e) => options.tags!.every((t) => e.tags?.includes(t)));
     }
     if (options.since) {
       filtered = filtered.filter((e) => e.timestamp >= options.since!);
@@ -161,7 +159,8 @@ export class TimelineBuilder {
     const total = filtered.length;
     const offset = options.offset ?? 0;
     const limit = options.limit;
-    const sliced = limit !== undefined ? filtered.slice(offset, offset + limit) : filtered.slice(offset);
+    const sliced =
+      limit !== undefined ? filtered.slice(offset, offset + limit) : filtered.slice(offset);
 
     return { events: sliced, total };
   }
@@ -175,8 +174,7 @@ export class TimelineBuilder {
     const gaps: TimelineGap[] = [];
 
     for (let i = 0; i < events.length - 1; i++) {
-      const durationMs =
-        events[i + 1].timestamp.getTime() - events[i].timestamp.getTime();
+      const durationMs = events[i + 1].timestamp.getTime() - events[i].timestamp.getTime();
       if (durationMs > this.gapThresholdMs) {
         gaps.push({ before: events[i], after: events[i + 1], durationMs });
       }

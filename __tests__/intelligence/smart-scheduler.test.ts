@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { SmartScheduler } from "../../packages/intelligence/src/smart-scheduler.js";
 
 const REF = new Date("2024-06-15T08:00:00Z");

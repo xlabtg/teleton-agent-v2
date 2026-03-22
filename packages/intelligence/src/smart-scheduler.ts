@@ -13,7 +13,11 @@ import { ScheduleParser } from "./schedule-parser.js";
 import { ScheduleStore } from "./schedule-store.js";
 import type { ScheduleEntry, CreateScheduleInput } from "./schedule-store.js";
 import { NotificationAdapter } from "./notification-adapter.js";
-import type { NotificationPayload, NotificationChannel, ChannelHandler } from "./notification-adapter.js";
+import type {
+  NotificationPayload,
+  NotificationChannel,
+  ChannelHandler,
+} from "./notification-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Types
