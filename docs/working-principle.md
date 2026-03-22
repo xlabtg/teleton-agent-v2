@@ -57,6 +57,7 @@ External World
 ```
 
 **Key design choices:**
+
 - The **core layer** has zero external dependencies — only TypeScript interfaces.
 - All external services (databases, LLMs, Telegram) are accessed through **ports** (interfaces), with concrete **adapters** in the infrastructure layer.
 - Components communicate via a **typed event bus** rather than direct calls, enabling loose coupling.
@@ -162,6 +163,7 @@ The fundamental execution model is a **Think → Act → Observe** cycle impleme
 ```
 
 **Safety constraints:**
+
 - `maxIterations` (default: 20) prevents infinite loops.
 - `timeoutMs` (default: 120 s) is enforced across the entire task.
 - Every action and result is published to the event bus for observability.
@@ -205,11 +207,11 @@ The store interface is backend-agnostic: the default uses SQLite + `sqlite-vec` 
 
 Entities extracted from conversations are stored as nodes; relationships between them are stored as typed edges:
 
-| Edge type    | Example                                  |
-|--------------|------------------------------------------|
-| `mentions`   | "Message #42 mentions 'TON wallet'"      |
-| `caused_by`  | "Error X caused_by 'invalid address'"    |
-| `related_to` | "TON topic related_to jetton topic"      |
+| Edge type    | Example                               |
+| ------------ | ------------------------------------- |
+| `mentions`   | "Message #42 mentions 'TON wallet'"   |
+| `caused_by`  | "Error X caused_by 'invalid address'" |
+| `related_to` | "TON topic related_to jetton topic"   |
 
 Multi-hop graph traversal discovers non-obvious connections that vector search alone would miss. For example, finding all events related to a user, transitively through mentions and causes.
 
@@ -222,6 +224,7 @@ importance = f(recency, access_frequency, emotional_weight, explicit_pin)
 ```
 
 Memories decay over time according to a configurable time-decay function. A background compaction job:
+
 1. Identifies low-scoring memory clusters.
 2. Summarises them with the LLM into a single compact memory.
 3. Removes the originals.
@@ -229,6 +232,7 @@ Memories decay over time according to a configurable time-decay function. A back
 Users can explicitly **pin** (boost score), **dismiss** (lower score), or **forget** (delete) memories.
 
 Storage is tiered:
+
 - **Hot** — frequently accessed, kept in fast in-memory cache.
 - **Warm** — moderately accessed, in SQLite.
 - **Cold** — rarely accessed, archived/summarised.
@@ -260,17 +264,18 @@ Each agent announces itself to the **AgentRegistry** with a descriptor:
 ```typescript
 interface AgentDescriptor {
   id: string;
-  role: AgentRole;           // "orchestrator" | "executor" | "observer" | "specialist"
+  role: AgentRole; // "orchestrator" | "executor" | "observer" | "specialist"
   capabilities: Capability[]; // e.g. [{name:"ton-transfer", scope:"blockchain"}]
   constraints: Constraint[];
-  namespace: string;          // multi-tenant isolation
+  namespace: string; // multi-tenant isolation
   version: string;
 }
 ```
 
 The **DiscoveryService** answers capability-based and semantic queries:
-- *"Which agents can handle TON transfers?"*
-- *"Find an agent most similar to this task description."*
+
+- _"Which agents can handle TON transfers?"_
+- _"Find an agent most similar to this task description."_
 
 A background `HealthChecker` polls registered agents; unresponsive agents are automatically deregistered.
 
@@ -278,10 +283,10 @@ A background `HealthChecker` polls registered agents; unresponsive agents are au
 
 When a complex task arrives, `TaskDecomposer` breaks it into self-contained subtasks. Two strategies are supported:
 
-| Strategy    | How it works                                      |
-|-------------|---------------------------------------------------|
-| Rule-based  | Pattern-match on task type, split by known rules  |
-| LLM-based   | Ask the LLM to produce a structured subtask list  |
+| Strategy   | How it works                                     |
+| ---------- | ------------------------------------------------ |
+| Rule-based | Pattern-match on task type, split by known rules |
+| LLM-based  | Ask the LLM to produce a structured subtask list |
 
 `CapabilityMatcher` scores each agent against each subtask. `DelegationRouter` picks the best agent using one of three routing modes:
 
@@ -384,6 +389,7 @@ incoming query → embed → compare against cached query embeddings
 - **Pattern matching:** known attack signatures (e.g., prompt injection patterns).
 
 When an anomaly is detected:
+
 1. An alert is created with severity classification (low / medium / high / critical).
 2. Investigation context (recent messages, user profile, matched signature) is packaged.
 3. The alert is routed to configured channels (log, webhook, Telegram message to operator).
@@ -396,11 +402,11 @@ When an anomaly is detected:
 
 `TemporalContext` normalises all time references in user messages:
 
-| User says           | Resolved to                    |
-|---------------------|--------------------------------|
-| "last week"         | 2026-03-09 00:00 – 2026-03-15 23:59 |
-| "before the meeting"| datetime of nearest scheduled meeting |
-| "urgent"            | urgency flag set; elevated priority |
+| User says            | Resolved to                           |
+| -------------------- | ------------------------------------- |
+| "last week"          | 2026-03-09 00:00 – 2026-03-15 23:59   |
+| "before the meeting" | datetime of nearest scheduled meeting |
+| "urgent"             | urgency flag set; elevated priority   |
 
 Memories and context entries are **time-weighted**: more recent information scores higher when the agent builds its LLM context window.
 
@@ -492,6 +498,7 @@ producer.publish(event) → EventBus → [subscriber1, subscriber2, …]
 ```
 
 Events are **persisted** (`EventStore`) enabling:
+
 - **Replay** — reconstruct state by re-playing events from a point in time.
 - **Debugging** — inspect the exact sequence of events that led to a failure.
 
@@ -525,7 +532,7 @@ User preferences are learned over time (V2-19 feedback loop) and fed back to the
 `AutoWidgets` infers the best widget type from the data shape:
 
 | Data type       | Widget            |
-|-----------------|-------------------|
+| --------------- | ----------------- |
 | Time series     | Line chart        |
 | Categorical     | Bar chart / Table |
 | Boolean state   | Status card       |
@@ -543,7 +550,7 @@ Widgets are composable: a dashboard is a tree of widgets, each independently upd
 `FeedbackCollector` gathers signals from multiple sources:
 
 | Signal type    | Example                                 |
-|----------------|-----------------------------------------|
+| -------------- | --------------------------------------- |
 | Explicit       | User thumbs-up / thumbs-down            |
 | Implicit retry | User rephrases the same request         |
 | Edit distance  | User heavily edits agent's draft output |
@@ -589,6 +596,7 @@ The network package (`@teleton/network`) defines how Teleton agents running in *
 ### Handshake
 
 Before exchanging tasks, two agents perform a capability handshake:
+
 1. Agent A sends `HELLO` with its capability list.
 2. Agent B replies with its own capability list and a session token.
 3. Subsequent messages carry the session token for authentication.
@@ -687,20 +695,20 @@ Configuration is written in YAML and validated with Zod at startup. Any invalid 
 
 ```yaml
 telegram:
-  api_id: 12345678        # MTProto app ID (required)
-  api_hash: "…"           # MTProto app hash (required)
-  session_string: "…"     # Saved session (set via env var TELEGRAM_SESSION)
+  api_id: 12345678 # MTProto app ID (required)
+  api_hash: "…" # MTProto app hash (required)
+  session_string: "…" # Saved session (set via env var TELEGRAM_SESSION)
 
 ton:
-  network: "testnet"       # testnet | mainnet
-  mnemonic: "…"            # Wallet seed (set via env var TON_MNEMONIC)
+  network: "testnet" # testnet | mainnet
+  mnemonic: "…" # Wallet seed (set via env var TON_MNEMONIC)
 
 llm:
   provider: "anthropic"
   model: "claude-sonnet-4-20250514"
   temperature: 0.7
   max_tokens: 4096
-  api_key: "…"             # Set via env var ANTHROPIC_API_KEY
+  api_key: "…" # Set via env var ANTHROPIC_API_KEY
 
 database:
   path: "./data/teleton.db"
@@ -711,34 +719,35 @@ api:
   cors: ["http://localhost:5173"]
 
 security:
-  jwt_secret: "…"          # Auto-generated if omitted
+  jwt_secret: "…" # Auto-generated if omitted
   rate_limit_window: 900000 # ms (15 min)
   rate_limit_max: 100
 
 agent:
   max_iterations: 20
   timeout_ms: 120000
-  personality: "…"         # Optional system-prompt customisation
+  personality: "…" # Optional system-prompt customisation
 ```
 
 ### Dependency Injection
 
 **Awilix** is used for IoC. Every service is registered under a canonical name and resolved lazily. This means:
+
 - Tests can swap any adapter (e.g., use an in-memory LLM stub) without changing domain code.
 - The same `AgentRuntime` code runs with SQLite locally and with a cloud database in production.
 
 Core ports (interfaces) defined in `packages/core/src/ports/`:
 
-| Port | Default Adapter |
-|------|----------------|
-| `MemoryRepository` | `SQLiteMemoryRepository` |
-| `TaskRepository` | `SQLiteTaskRepository` |
-| `SessionRepository` | `SQLiteSessionRepository` |
-| `EventRepository` | `SQLiteEventRepository` |
-| `LLMProvider` | Anthropic Claude adapter |
-| `TelegramBridge` | MTProto client adapter |
-| `TonWallet` | TON SDK adapter |
-| `SecretsProvider` | Environment variable adapter |
+| Port                | Default Adapter              |
+| ------------------- | ---------------------------- |
+| `MemoryRepository`  | `SQLiteMemoryRepository`     |
+| `TaskRepository`    | `SQLiteTaskRepository`       |
+| `SessionRepository` | `SQLiteSessionRepository`    |
+| `EventRepository`   | `SQLiteEventRepository`      |
+| `LLMProvider`       | Anthropic Claude adapter     |
+| `TelegramBridge`    | MTProto client adapter       |
+| `TonWallet`         | TON SDK adapter              |
+| `SecretsProvider`   | Environment variable adapter |
 | `EmbeddingProvider` | OpenAI / local model adapter |
 
 ---
