@@ -41,6 +41,14 @@ logs/
 *.db
 data/
 
+# Sessions & secrets (V1)
+*.session
+*.session-journal
+config.yaml
+wallet.json
+telegram_session.txt
+telegram-offset.json
+
 # Docker
 .docker/
 dist/

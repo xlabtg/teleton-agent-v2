@@ -14,6 +14,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/", "node_modules/", "coverage/", "web/"],
+    ignores: ["dist/", "node_modules/", "coverage/", "web/", "v1-src/", "v1-docs/", "improvements/"],
   }
 );
