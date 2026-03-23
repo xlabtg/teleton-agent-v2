@@ -42,7 +42,7 @@ export function createServer(config: ServerConfig): Hono {
   app.get("/", (ctx) => {
     return ctx.json({
       name: "teleton-agent-v2",
-      version: "2.0.0-alpha.1",
+      version: "2.0.0-alpha.2",
       docs: "/api/docs",
     });
   });

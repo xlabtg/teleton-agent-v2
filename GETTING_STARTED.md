@@ -2,6 +2,8 @@
 
 Complete guide to installing, configuring, and running your Teleton AI agent.
 
+> **Note:** This guide covers the **V1 agent** (fully working, included in this repository under `v1-src/`). For V2 architecture and launch instructions, see the main [README](README.md).
+
 ---
 
 ## Prerequisites
@@ -20,26 +22,22 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 
 ## Installation
 
-**npm (recommended):**
-```bash
-npm install -g teleton@latest
-```
-
 **One-liner:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TONresistor/teleton-agent/main/install.sh | bash
-```
-
-**Docker:**
-```bash
-docker run -it -v ~/.teleton:/data ghcr.io/tonresistor/teleton:latest setup
+curl -fsSL https://raw.githubusercontent.com/xlabtg/teleton-agent-v2/main/install.sh | bash
 ```
 
 **From source:**
 ```bash
-git clone https://github.com/TONresistor/teleton-agent.git
-cd teleton-agent
-npm install && npm run build
+git clone https://github.com/xlabtg/teleton-agent-v2.git
+cd teleton-agent-v2
+npm install && npm run build:all
+```
+
+**Docker:**
+```bash
+docker build -t teleton-agent-v2 .
+docker run -it -v ~/.teleton:/data teleton-agent-v2 node dist/cli/index.js setup
 ```
 
 ---
@@ -296,7 +294,7 @@ Verifies config, Telegram session, wallet, and database.
 ### From Source
 
 ```bash
-git clone https://github.com/TONresistor/teleton-agent.git
+git clone https://github.com/xlabtg/teleton-agent-v2.git
 cd teleton-agent
 npm install
 npm run build
@@ -368,7 +366,7 @@ src/
 
 ## Support
 
-- **GitHub Issues**: [github.com/TONresistor/teleton-agent/issues](https://github.com/TONresistor/teleton-agent/issues)
+- **GitHub Issues**: [github.com/xlabtg/teleton-agent-v2/issues](https://github.com/xlabtg/teleton-agent-v2/issues)
 - **Group Chat**: [@ResistanceForum](https://t.me/ResistanceForum)
 
 ---
