@@ -1,6 +1,6 @@
-# Contributing to Teleton Agent
+# Contributing to Teleton Agent V2
 
-Thank you for your interest in contributing to Teleton Agent. This guide covers everything you need to get started.
+Thank you for your interest in contributing to Teleton Agent V2. This guide covers everything you need to get started.
 
 ## Table of Contents
 
@@ -16,24 +16,24 @@ Thank you for your interest in contributing to Teleton Agent. This guide covers 
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/TONresistor/teleton-agent/issues/new?template=bug_report.md) using the bug report template. Include:
+Open a [GitHub Issue](https://github.com/xlabtg/teleton-agent-v2/issues/new?template=bug_report.md) using the bug report template. Include:
 
 - A clear description of the problem
 - Steps to reproduce
 - Expected vs. actual behavior
 - Environment details (OS, Node.js version, teleton version, LLM provider)
 
-Search [existing issues](https://github.com/TONresistor/teleton-agent/issues) first to avoid duplicates.
+Search [existing issues](https://github.com/xlabtg/teleton-agent-v2/issues) first to avoid duplicates.
 
 ## Suggesting Features
 
-Open a [GitHub Issue](https://github.com/TONresistor/teleton-agent/issues/new?template=feature_request.md) using the feature request template. Describe the use case, your proposed solution, and any alternatives you considered.
+Open a [GitHub Issue](https://github.com/xlabtg/teleton-agent-v2/issues/new?template=feature_request.md) using the feature request template. Describe the use case, your proposed solution, and any alternatives you considered.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/TONresistor/teleton-agent.git
-cd teleton-agent
+git clone https://github.com/xlabtg/teleton-agent-v2.git
+cd teleton-agent-v2
 npm install
 npm run dev
 ```
@@ -127,10 +127,10 @@ Key conventions:
 
 ## Plugin Development
 
-Plugins extend the agent with custom tools without modifying core code. See the [Plugin SDK documentation](plugins.md) for a complete guide, or refer to the plugin example in the [README](README.md#plugins).
+Plugins extend the agent with custom tools without modifying core code. See the [Plugin SDK documentation](v1-docs/plugins.md) for a complete guide on V1 plugins, or refer to `packages/sdk/` for the V2 Plugin SDK.
 
-Plugins are loaded from `~/.teleton/plugins/` at startup -- no rebuild required.
+V1 plugins are loaded from `~/.teleton/plugins/` at startup — no rebuild required.
 
 ---
 
-Questions? Reach out on Telegram: [@ResistanceForum](https://t.me/ResistanceForum) or open a [discussion](https://github.com/TONresistor/teleton-agent/issues).
+Questions? Reach out on Telegram: [@ResistanceForum](https://t.me/ResistanceForum) or open a [discussion](https://github.com/xlabtg/teleton-agent-v2/issues).

@@ -120,7 +120,8 @@ packages/
 │   ├── context-serializer.ts
 │   └── message-router.ts
 │
-└── sdk/               # Plugin SDK for third-party extensions
+├── sdk/               # Plugin SDK for third-party extensions
+└── sdk-v1/            # V1 Plugin SDK (backward-compatible with V1 plugins)
 
 apps/
 ├── agent/             # Main application entry point (TeletonApp)
@@ -545,14 +546,12 @@ Roles: `admin`, `user`, `plugin`, `readonly`.
 
 ### Endpoints
 
-| Method | Path          | Description                               |
-| ------ | ------------- | ----------------------------------------- |
-| `GET`  | `/health`     | Health check — returns `{ status: "ok" }` |
-| `GET`  | `/agents`     | List all registered agents                |
-| `GET`  | `/agents/:id` | Get agent details                         |
-| `GET`  | `/tasks`      | List tasks                                |
-| `POST` | `/tasks`      | Create and dispatch a new task            |
-| `GET`  | `/tasks/:id`  | Get task status and result                |
+| Method | Path                    | Description                               |
+| ------ | ----------------------- | ----------------------------------------- |
+| `GET`  | `/health`               | Health check — returns `{ status: "ok" }` |
+| `GET`  | `/api/agents`           | List all registered agents                |
+| `GET`  | `/api/agents/:id`       | Get agent details                         |
+| `POST` | `/api/agents/:id/tasks` | Delegate a task to a specific agent       |
 
 ---
 
@@ -591,7 +590,8 @@ npm install
 ```bash
 # V2 (new architecture)
 npm run dev           # Start V2 in development mode (tsx watch)
-npm run build         # Build everything (V1 + V2 + WebUI)
+npm run build         # Build V2 packages only
+npm run build:all     # Build everything (V1 + V2 + WebUI)
 npm run build:v2      # Build only V2 packages
 npm run build:v1      # Build only V1 backend
 npm run build:web     # Build only WebUI frontend

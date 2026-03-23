@@ -11,7 +11,7 @@ export function createHealthRoutes(): Hono {
   app.get("/health", (ctx) => {
     return ctx.json({
       status: "ok",
-      version: "2.0.0-alpha.1",
+      version: "2.0.0-alpha.2",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
     });

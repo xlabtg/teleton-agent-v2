@@ -10,7 +10,7 @@ describe("Health Routes", () => {
 
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("2.0.0-alpha.1");
+    expect(body.version).toBe("2.0.0-alpha.2");
     expect(body.timestamp).toBeDefined();
     expect(typeof body.uptime).toBe("number");
   });

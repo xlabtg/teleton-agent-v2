@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.2] - 2026-03-23
+
+### Added
+
+- **Unified repository**: Merged V1 ([teleton-agent](https://github.com/xlabtg/teleton-agent)) into this V2 repository — fully self-contained, no separate V1 installation required
+- **V1 source** (`v1-src/`): Full V1 agent runtime, 120+ Telegram tools, TON/DeFi tools, CLI, WebUI backend, memory system, providers
+- **WebUI frontend** (`web/`): React + Vite dashboard with setup wizard, agent control, configuration, hooks, analytics
+- **V1 Plugin SDK** (`packages/sdk-v1/`): Plugin SDK for third-party V1 extensions
+- **CLI & installer**: `bin/teleton.js`, updated `install.sh` pointing to `xlabtg/teleton-agent-v2`
+- **Docker**: Updated Dockerfile — Debian slim 2-stage build supporting native modules; exposes ports 3000 (V2 API) and 7777 (WebUI)
+- **V1 documentation** (`v1-docs/`): Deployment, plugins, Telegram setup, TON wallet, management API docs
+- **Improvement specs** (`improvements/`): V2 feature design documents
+
+### Changed
+
+- V1 dependencies merged into root `package.json`
+- New scripts: `build:all` (builds V1 + V2 + WebUI), `build:v1`, `dev:v1`, `start:v1`, `setup`, `doctor:v1`, `dev:web`
+- V1 source excluded from V2 TypeScript/ESLint/Prettier checks
+- Version bumped to `2.0.0-alpha.2`
+
+---
+
 ## [0.8.1] - 2026-03-05
 
 ### Added

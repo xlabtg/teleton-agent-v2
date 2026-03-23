@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("teleton")
   .description("Teleton V2: Autonomous AI Agent for Telegram & TON Blockchain")
-  .version("2.0.0-alpha.1");
+  .version("2.0.0-alpha.2");
 
 program
   .command("start")
