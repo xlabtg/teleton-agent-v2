@@ -83,9 +83,7 @@ export class TeletonApp {
           hostname: config.api.host,
         },
         () => {
-          console.log(
-            `✅ API server started on http://${config.api.host}:${config.api.port}`
-          );
+          console.log(`✅ API server started on http://${config.api.host}:${config.api.port}`);
           resolveServer();
         }
       );

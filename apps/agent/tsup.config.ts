@@ -8,10 +8,5 @@ export default defineConfig({
   outDir: "dist/apps/agent",
   // Bundle workspace packages so the built output runs without workspace resolution.
   // Only keep truly external native dependencies that cannot be bundled.
-  noExternal: [
-    "@teleton/core",
-    "@teleton/infrastructure",
-    "@teleton/api",
-    "@teleton/sdk",
-  ],
+  noExternal: ["@teleton/core", "@teleton/infrastructure", "@teleton/api", "@teleton/sdk"],
 });
