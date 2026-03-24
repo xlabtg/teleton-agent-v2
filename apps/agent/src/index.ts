@@ -14,6 +14,7 @@ import {
   SQLiteTaskRepository,
 } from "@teleton/infrastructure/database/sqlite.adapter.js";
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
+import { serve } from "@hono/node-server";
 import { createServer } from "@teleton/api/server.js";
 import { appConfigSchema } from "../../../configs/config.schema.js";
 
@@ -59,7 +60,7 @@ export class TeletonApp {
     console.log("✅ Agent runtime created");
 
     // 5. Start API server
-    createServer({
+    const app = createServer({
       port: config.api.port,
       host: config.api.host,
       auth: {
@@ -73,7 +74,20 @@ export class TeletonApp {
         corsOrigins: config.api.cors ?? [],
       },
     });
-    console.log(`✅ API server configured on ${config.api.host}:${config.api.port}`);
+
+    await new Promise<void>((resolveServer) => {
+      serve(
+        {
+          fetch: app.fetch,
+          port: config.api.port,
+          hostname: config.api.host,
+        },
+        () => {
+          console.log(`✅ API server started on http://${config.api.host}:${config.api.port}`);
+          resolveServer();
+        }
+      );
+    });
 
     // 6. Mark as running
     this.running = true;
@@ -93,7 +107,7 @@ export class TeletonApp {
   private loadConfig(configPath?: string): AppConfig {
     const paths = [
       configPath,
-      resolve(process.env.HOME ?? "", ".teleton-v2/config.yaml"),
+      resolve(process.env.HOME ?? process.env.USERPROFILE ?? "", ".teleton-v2/config.yaml"),
       resolve(process.cwd(), "configs/default.yaml"),
     ].filter(Boolean) as string[];
 

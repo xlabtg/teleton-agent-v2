@@ -70,8 +70,12 @@ function hasPermission(role: UserRole, path: string): boolean {
 
 export function createAuthMiddleware(config: AuthConfig) {
   return async (ctx: Context, next: Next) => {
-    // Skip auth for health and public endpoints
-    if (ctx.req.path === "/api/health" || ctx.req.path === "/") {
+    // Skip auth for health, public, and auth endpoints
+    if (
+      ctx.req.path === "/api/health" ||
+      ctx.req.path === "/" ||
+      ctx.req.path.startsWith("/api/auth/")
+    ) {
       return next();
     }
 
