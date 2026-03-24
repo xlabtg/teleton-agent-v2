@@ -7,5 +7,6 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   outDir: "dist/packages/api",
-  external: ["@teleton/core", "@teleton/infrastructure"],
+  // Bundle workspace packages so the built output runs without workspace resolution.
+  noExternal: ["@teleton/core", "@teleton/infrastructure"],
 });
