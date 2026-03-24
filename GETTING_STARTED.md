@@ -262,6 +262,51 @@ The agent uses a hybrid search system for context-aware responses:
 
 ---
 
+## Windows Installation
+
+Teleton works on Windows. Follow these steps to avoid common pitfalls.
+
+### Prerequisites
+
+1. Install **Node.js 20+** from [nodejs.org](https://nodejs.org/) — use the Windows Installer (`.msi`).
+2. Install **Git for Windows** from [git-scm.com](https://git-scm.com/) — this provides Git Bash which you can use as an alternative shell.
+3. Open **PowerShell** or **Command Prompt** as a regular user (no admin needed).
+
+### Installation
+
+```powershell
+git clone https://github.com/xlabtg/teleton-agent-v2.git
+cd teleton-agent-v2
+npm install
+npm run build:all
+```
+
+> **Note:** Do not use `~/` to reference your home directory in CMD. Use `%USERPROFILE%` instead.
+> For example, the config file lives at `%USERPROFILE%\.teleton-v2\config.yaml`.
+
+### Running
+
+```powershell
+npm run dev
+```
+
+Or after building:
+
+```powershell
+node dist/apps/agent/index.js
+```
+
+### Common Windows Issues
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `Cannot find package '@teleton/core'` after build | Workspace packages not bundled | Use `npm run build:apps` — bundler now inlines workspace deps |
+| `Системе не удается найти указанный путь` (path not found) | Unix `~/` path used in CMD | Use `%USERPROFILE%` or PowerShell's `$HOME` instead |
+| Build errors with special characters | Wrong file encoding | Ensure editor saves files as UTF-8 without BOM |
+| `NODE_OPTIONS` quoting errors | CMD quote handling | Use PowerShell, or `set NODE_OPTIONS=--trace-warnings` (no quotes in CMD) |
+
+---
+
 ## Troubleshooting
 
 ### Telegram Login Fails

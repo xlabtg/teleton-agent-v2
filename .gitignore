@@ -40,6 +40,8 @@ logs/
 *.sqlite
 *.db
 data/
+# Allow source data directories (e.g. web/src/data contains TypeScript source files)
+!web/src/data/
 
 # Sessions & secrets (V1)
 *.session

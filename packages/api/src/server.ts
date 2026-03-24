@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { createHealthRoutes } from "./routes/health.js";
 import { createAgentRoutes } from "./routes/agents.js";
+import { createAuthRoutes } from "./routes/auth.js";
 import {
   createRateLimitMiddleware,
   securityHeadersMiddleware,
@@ -36,6 +37,7 @@ export function createServer(config: ServerConfig): Hono {
 
   // Routes
   app.route("/", createHealthRoutes());
+  app.route("/api/auth", createAuthRoutes(config.auth));
   app.route("/api/agents", createAgentRoutes());
 
   // Root

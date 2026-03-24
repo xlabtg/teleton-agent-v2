@@ -10,3 +10,4 @@ export {
 } from "./middleware/security.middleware.js";
 export type { SecurityConfig } from "./middleware/security.middleware.js";
 export { errorHandler } from "./middleware/error-handler.js";
+export { createAuthRoutes } from "./routes/auth.js";
