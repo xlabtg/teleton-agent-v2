@@ -65,6 +65,49 @@ export function createAuthRoutes(config: AuthConfig): Hono {
   });
 
   /**
+   * GET /api/auth/me
+   * Returns the current user info from the Bearer token.
+   */
+  app.get("/me", async (ctx) => {
+    const authHeader = ctx.req.header("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return ctx.json(
+        {
+          error: {
+            code: "AUTHENTICATION_ERROR",
+            message: "Missing or invalid Authorization header",
+          },
+        },
+        401
+      );
+    }
+
+    const token = authHeader.slice(7);
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        throw new Error("Invalid token format");
+      }
+      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as {
+        sub: string;
+        role: string;
+        iat: number;
+        exp: number;
+      };
+
+      if (payload.exp < Math.floor(Date.now() / 1000)) {
+        return ctx.json({ error: { code: "AUTHENTICATION_ERROR", message: "Token expired" } }, 401);
+      }
+
+      return ctx.json({
+        user: { sub: payload.sub, role: payload.role, iat: payload.iat, exp: payload.exp },
+      });
+    } catch {
+      return ctx.json({ error: { code: "AUTHENTICATION_ERROR", message: "Invalid token" } }, 401);
+    }
+  });
+
+  /**
    * POST /api/auth/refresh
    * Accepts a refresh token and returns a new access token.
    */
