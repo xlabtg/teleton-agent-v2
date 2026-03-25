@@ -157,6 +157,66 @@ describe("Auth Routes", () => {
     });
   });
 
+  describe("GET /api/auth/me", () => {
+    const router = createAuthRoutes(TEST_AUTH_CONFIG);
+
+    it("should return user info for valid token", async () => {
+      // Get a token first
+      const loginRes = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "test" }),
+      });
+      const { token } = (await loginRes.json()) as Record<string, string>;
+
+      const res = await router.request("/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.user).toBeDefined();
+      const user = body.user as Record<string, unknown>;
+      expect(user.sub).toBe("admin");
+      expect(user.role).toBe("admin");
+      expect(typeof user.iat).toBe("number");
+      expect(typeof user.exp).toBe("number");
+    });
+
+    it("should return 401 when Authorization header is missing", async () => {
+      const res = await router.request("/me");
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect((body.error as Record<string, unknown>).code).toBe("AUTHENTICATION_ERROR");
+    });
+
+    it("should return 401 for invalid token", async () => {
+      const res = await router.request("/me", {
+        headers: { Authorization: "Bearer not.a.valid.token" },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return user role correctly for non-admin user", async () => {
+      const loginRes = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "alice", password: "password" }),
+      });
+      const { token } = (await loginRes.json()) as Record<string, string>;
+
+      const res = await router.request("/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      const user = body.user as Record<string, unknown>;
+      expect(user.sub).toBe("alice");
+      expect(user.role).toBe("user");
+    });
+  });
+
   describe("Auth middleware integration", () => {
     const app = buildTestApp();
 
