@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
 COPY package.json package-lock.json ./
 
 # Copy workspace package.json files (needed for npm ci workspace resolution)
-COPY packages/sdk/package.json packages/sdk/
 COPY packages/sdk-v1/package.json packages/sdk-v1/
 COPY web/package.json web/
 
