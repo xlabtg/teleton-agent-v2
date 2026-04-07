@@ -1,4 +1,4 @@
-name: CI/CD
+name: CI
 
 on:
   push:
@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  security:
-    name: Security Audit
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,10 +21,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=moderate --production
+      - run: npm run lint
+      - run: npm run format:check
 
-  quality:
-    name: Code Quality
+  typecheck:
+    name: TypeScript
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +35,9 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
 
   test:
-    name: Tests
+    name: Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -50,13 +53,30 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-${{ matrix.node-version }}
+          name: coverage-node${{ matrix.node-version }}
           path: coverage/
 
-  build:
-    name: Build
-    needs: [security, quality, test]
+  build-sdk:
+    name: Build (SDK with DTS)
     runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:sdk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dist
+          path: dist/packages/sdk/
+
+  build-runtime:
+    name: Build (Runtime)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,11 +85,27 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-dist
+          path: dist/
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run security:audit
 
   docker:
     name: Docker Build
-    needs: build
     runs-on: ubuntu-latest
+    needs: [build-runtime]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
