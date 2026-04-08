@@ -59,15 +59,28 @@ export function securityHeadersMiddleware() {
 
 /**
  * CORS middleware configuration.
+ *
+ * Security notes:
+ * - Wildcards ("*") are rejected because they are incompatible with credentials.
+ * - credentials is set to false because the API uses JWT Bearer tokens in the
+ *   Authorization header, which are not CSRF-vulnerable and do not require
+ *   credentials mode to be enabled.
  */
 export function createCorsConfig(origins: string[]) {
+  if (origins.includes("*")) {
+    throw new Error(
+      'CORS misconfiguration: wildcard origin "*" is not allowed. ' +
+        "Specify explicit origins instead."
+    );
+  }
+
   return {
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["X-Request-Id", "Retry-After"],
     maxAge: 3600,
-    credentials: true,
+    credentials: false,
   };
 }
 
