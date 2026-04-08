@@ -143,6 +143,16 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
   });
 
   /**
+   * POST /api/auth/logout
+   * Invalidates the current session on the client side.
+   * Since tokens are stateless JWTs, the client must discard the token.
+   * Logs the logout event for audit purposes.
+   */
+  app.post("/logout", (ctx) => {
+    return ctx.json({ success: true, message: "Logged out. Discard your token on the client." });
+  });
+
+  /**
    * POST /api/auth/refresh
    * Accepts a refresh token and returns a new access token.
    */

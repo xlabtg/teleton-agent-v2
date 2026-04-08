@@ -18,8 +18,11 @@ import {
   maskToken,
   safeCompare,
   COOKIE_NAME,
+  ACTIVITY_COOKIE_NAME,
   COOKIE_MAX_AGE,
+  DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
 } from "./middleware/auth.js";
+import { initSecurity } from "../services/security.js";
 import { logInterceptor } from "./log-interceptor.js";
 import { createStatusRoutes } from "./routes/status.js";
 import { createToolsRoutes } from "./routes/tools.js";
@@ -87,14 +90,43 @@ export class WebUIServer {
     this.setupNotificationTriggers();
   }
 
-  /** Set an HttpOnly session cookie */
+  /**
+   * Determine whether the connection is over HTTPS (production).
+   * Checks X-Forwarded-Proto (set by reverse proxies like nginx/Caddy) and
+   * the request URL scheme.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Hono context type
+  private isSecureConnection(c: any): boolean {
+    const proto = c.req.header("x-forwarded-proto");
+    if (proto) return proto === "https";
+    const url = c.req.url as string;
+    return url.startsWith("https://");
+  }
+
+  /** Set an HttpOnly session cookie and update the last-activity timestamp */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Hono context type
   private setSessionCookie(c: any): void {
+    const secure = this.isSecureConnection(c);
     setCookie(c, COOKIE_NAME, this.authToken, {
       path: "/",
       httpOnly: true,
       sameSite: "Strict",
-      secure: false, // localhost is HTTP
+      // Secure flag: required in production (HTTPS), omitted for localhost HTTP
+      secure,
+      maxAge: COOKIE_MAX_AGE,
+    });
+    this.updateActivityCookie(c, secure);
+  }
+
+  /** Refresh the last-activity cookie on each authenticated request */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Hono context type
+  private updateActivityCookie(c: any, secure?: boolean): void {
+    const isSecure = secure ?? this.isSecureConnection(c);
+    setCookie(c, ACTIVITY_COOKIE_NAME, String(Math.floor(Date.now() / 1000)), {
+      path: "/",
+      httpOnly: false, // readable by JS for client-side idle detection
+      sameSite: "Strict",
+      secure: isSecure,
       maxAge: COOKIE_MAX_AGE,
     });
   }
@@ -142,9 +174,37 @@ export class WebUIServer {
     // Auth for all /api/* routes
     // Accepts: HttpOnly cookie > Bearer header > ?token= query param (fallback)
     this.app.use("/api/*", async (c, next) => {
+      // Resolve inactivity timeout from security settings (fallback to default)
+      let inactivityTimeoutSeconds: number | null = DEFAULT_INACTIVITY_TIMEOUT_SECONDS;
+      try {
+        const security = initSecurity(this.deps.memory.db);
+        const settings = security.getSettings();
+        inactivityTimeoutSeconds =
+          settings.session_timeout_minutes !== null
+            ? settings.session_timeout_minutes * 60
+            : null; // null = no timeout
+      } catch {
+        // If DB is unavailable, fall back to default timeout
+      }
+
       // 1. Check HttpOnly session cookie (primary — browser)
       const cookieToken = getCookie(c, COOKIE_NAME);
       if (cookieToken && safeCompare(cookieToken, this.authToken)) {
+        // Enforce inactivity timeout via last-activity cookie
+        if (inactivityTimeoutSeconds !== null) {
+          const lastActivityRaw = getCookie(c, ACTIVITY_COOKIE_NAME);
+          if (lastActivityRaw) {
+            const lastActivity = parseInt(lastActivityRaw, 10);
+            const now = Math.floor(Date.now() / 1000);
+            if (!isNaN(lastActivity) && now - lastActivity > inactivityTimeoutSeconds) {
+              deleteCookie(c, COOKIE_NAME, { path: "/" });
+              deleteCookie(c, ACTIVITY_COOKIE_NAME, { path: "/" });
+              return c.json({ success: false, error: "Session expired due to inactivity" }, 401);
+            }
+          }
+          // Update last activity on every authenticated request
+          this.updateActivityCookie(c);
+        }
         return next();
       }
 
@@ -183,6 +243,10 @@ export class WebUIServer {
         return c.json({ success: false, error: "Invalid token" }, 401);
       }
 
+      // Session fixation protection: clear any existing session before setting a new one
+      deleteCookie(c, COOKIE_NAME, { path: "/" });
+      deleteCookie(c, ACTIVITY_COOKIE_NAME, { path: "/" });
+
       this.setSessionCookie(c);
       return c.redirect("/");
     });
@@ -195,6 +259,10 @@ export class WebUIServer {
           return c.json({ success: false, error: "Invalid token" }, 401);
         }
 
+        // Session fixation protection: clear any existing session before setting a new one
+        deleteCookie(c, COOKIE_NAME, { path: "/" });
+        deleteCookie(c, ACTIVITY_COOKIE_NAME, { path: "/" });
+
         this.setSessionCookie(c);
         return c.json({ success: true });
       } catch {
@@ -202,9 +270,10 @@ export class WebUIServer {
       }
     });
 
-    // Logout: clear cookie
+    // Logout: clear session and activity cookies
     this.app.post("/auth/logout", (c) => {
       deleteCookie(c, COOKIE_NAME, { path: "/" });
+      deleteCookie(c, ACTIVITY_COOKIE_NAME, { path: "/" });
       return c.json({ success: true });
     });
 
