@@ -10,11 +10,14 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createDocsRoutes } from "./routes/docs.js";
 import {
   createRateLimitMiddleware,
+  createAuthRateLimitMiddleware,
   securityHeadersMiddleware,
   requestIdMiddleware,
   type SecurityConfig,
+  type AuthRateLimitConfig,
 } from "./middleware/security.middleware.js";
 import { createAuthMiddleware, type AuthConfig } from "./middleware/auth.middleware.js";
+import { createCsrfMiddleware, type CsrfConfig } from "./middleware/csrf.middleware.js";
 import { errorHandler } from "./middleware/error-handler.js";
 
 export interface ServerConfig {
@@ -22,6 +25,8 @@ export interface ServerConfig {
   host: string;
   auth: AuthConfig;
   security: SecurityConfig;
+  csrf?: CsrfConfig;
+  authRateLimit?: AuthRateLimitConfig;
 }
 
 export function createServer(config: ServerConfig): Hono {
@@ -31,14 +36,18 @@ export function createServer(config: ServerConfig): Hono {
   app.use("*", requestIdMiddleware());
   app.use("*", securityHeadersMiddleware());
   app.use("*", createRateLimitMiddleware(config.security));
+  // Apply stricter rate limiting to auth endpoints before the auth middleware
+  // to prevent brute-force attacks and credential stuffing.
+  app.use("/api/auth/*", createAuthRateLimitMiddleware(config.authRateLimit));
   app.use("/api/*", createAuthMiddleware(config.auth));
+  app.use("/api/*", createCsrfMiddleware(config.csrf));
 
   // Error handler
   app.onError(errorHandler);
 
   // Routes
   app.route("/", createHealthRoutes());
-  app.route("/api/auth", createAuthRoutes(config.auth));
+  app.route("/api/auth", createAuthRoutes(config.auth, config.csrf));
   app.route("/api/docs", createDocsRoutes());
   app.route("/api/agents", createAgentRoutes());
 

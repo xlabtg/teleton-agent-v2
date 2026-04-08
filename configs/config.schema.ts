@@ -30,7 +30,13 @@ export const databaseConfigSchema = z.object({
 export const apiConfigSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3000),
   host: z.string().default("0.0.0.0"),
-  cors: z.array(z.string()).default(["http://localhost:5173"]),
+  cors: z
+    .array(z.string())
+    .refine((origins) => !origins.includes("*"), {
+      message:
+        'CORS misconfiguration: wildcard origin "*" is not allowed. Specify explicit origins instead.',
+    })
+    .default(["http://localhost:5173"]),
 });
 
 export const securityConfigSchema = z.object({
