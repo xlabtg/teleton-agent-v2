@@ -70,7 +70,7 @@
   },
   "dependencies": {
     "@dedust/sdk": "^0.8.7",
-    "@hono/node-server": "^1.19.9",
+    "@hono/node-server": "^1.19.13",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.2.1",
     "@mariozechner/pi-ai": "^0.58.4",
@@ -86,7 +86,7 @@
     "chokidar": "^5.0.0",
     "commander": "^14.0.0",
     "grammy": "^1.40.0",
-    "hono": "^4.12.8",
+    "hono": "^4.12.12",
     "hono-rate-limiter": "^0.5.3",
     "lottie-react": "^2.4.1",
     "ora": "^9.3.0",
