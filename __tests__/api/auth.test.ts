@@ -4,6 +4,7 @@
  * and that auth middleware correctly protects/exposes routes.
  */
 import { describe, it, expect } from "vitest";
+import * as jose from "jose";
 import { createAuthRoutes } from "../../packages/api/src/routes/auth.js";
 import { createAuthMiddleware } from "../../packages/api/src/middleware/auth.middleware.js";
 import { createAgentRoutes } from "../../packages/api/src/routes/agents.js";
@@ -267,6 +268,35 @@ describe("Auth Routes", () => {
     it("should allow GET /health without token", async () => {
       const res = await app.request("/health");
       expect(res.status).toBe(200);
+    });
+
+    it("should reject a forged token signed with a different secret (CVE: signature bypass)", async () => {
+      // Attacker crafts a token claiming admin role but signs it with a different secret
+      const attackerSecret = new TextEncoder().encode("attacker-secret");
+      const forgedToken = await new jose.SignJWT({ sub: "attacker", role: "admin" })
+        .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
+        .sign(attackerSecret);
+
+      const res = await app.request("/api/agents", {
+        headers: { Authorization: `Bearer ${forgedToken}` },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject a token with a manually crafted payload (no valid signature)", async () => {
+      // Attacker creates a token by base64-encoding a payload without a real signature
+      const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+      const payload = Buffer.from(
+        JSON.stringify({ sub: "attacker", role: "admin", iat: 1000000, exp: 9999999999 })
+      ).toString("base64url");
+      const fakeSignature = Buffer.from("fake-signature").toString("base64url");
+      const forgedToken = `${header}.${payload}.${fakeSignature}`;
+
+      const res = await app.request("/api/agents", {
+        headers: { Authorization: `Bearer ${forgedToken}` },
+      });
+      expect(res.status).toBe(401);
     });
   });
 });
