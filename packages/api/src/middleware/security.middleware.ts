@@ -12,6 +12,15 @@ export interface SecurityConfig {
   corsOrigins: string[];
 }
 
+export interface AuthRateLimitConfig {
+  /** Max login/refresh attempts per IP per window. Default: 5 per 15 min */
+  loginWindowMs?: number;
+  loginMaxRequests?: number;
+  /** Max refresh token requests per IP per window. Default: 20 per 15 min */
+  refreshWindowMs?: number;
+  refreshMaxRequests?: number;
+}
+
 /**
  * Extract the real client IP from the request context.
  *
@@ -73,6 +82,50 @@ export function createRateLimitMiddleware(config: SecurityConfig, limiter?: Rate
       ctx.header("Retry-After", String(status.retryAfterSeconds));
       // RateLimiter.check throws RateLimitError; we replicate it here to avoid
       // a second consume() call and to keep the RateLimitError import local.
+      const { RateLimitError } = await import("@teleton/core/errors/domain-errors.js");
+      throw new RateLimitError(status.retryAfterSeconds);
+    }
+
+    await next();
+  };
+}
+
+/**
+ * Stricter rate limiter for authentication endpoints.
+ * Applies per-IP limits on /api/auth/login and /api/auth/refresh to prevent
+ * brute-force attacks and credential stuffing. Uses separate keys prefixed with
+ * "auth:" so auth limits are tracked independently from general API limits.
+ *
+ * For production, replace the in-memory RateLimiter with a Redis-backed store.
+ */
+export function createAuthRateLimitMiddleware(config: AuthRateLimitConfig = {}) {
+  const loginWindowMs = config.loginWindowMs ?? 15 * 60 * 1000; // 15 min
+  const loginMaxRequests = config.loginMaxRequests ?? 5;
+  const refreshWindowMs = config.refreshWindowMs ?? 15 * 60 * 1000; // 15 min
+  const refreshMaxRequests = config.refreshMaxRequests ?? 20;
+
+  const loginLimiter = new RateLimiter({
+    windows: [{ windowMs: loginWindowMs, maxRequests: loginMaxRequests }],
+  });
+  const refreshLimiter = new RateLimiter({
+    windows: [{ windowMs: refreshWindowMs, maxRequests: refreshMaxRequests }],
+  });
+
+  return async (ctx: Context, next: Next) => {
+    const ip = ctx.req.header("x-forwarded-for") ?? "unknown";
+    const path = ctx.req.path;
+
+    let status;
+    if (path === "/api/auth/login") {
+      status = loginLimiter.consume(`auth:login:${ip}`);
+    } else if (path === "/api/auth/refresh") {
+      status = refreshLimiter.consume(`auth:refresh:${ip}`);
+    } else {
+      return next();
+    }
+
+    if (!status.allowed) {
+      ctx.header("Retry-After", String(status.retryAfterSeconds));
       const { RateLimitError } = await import("@teleton/core/errors/domain-errors.js");
       throw new RateLimitError(status.retryAfterSeconds);
     }
