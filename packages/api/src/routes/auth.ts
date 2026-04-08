@@ -3,34 +3,58 @@
  * Provides login endpoint that returns a JWT-like token.
  */
 
+import * as jose from "jose";
 import { Hono } from "hono";
+import { z } from "zod";
 import type { AuthConfig } from "../middleware/auth.middleware.js";
+import {
+  generateCsrfToken,
+  setCsrfCookie,
+  type CsrfConfig,
+} from "../middleware/csrf.middleware.js";
+
+const LoginSchema = z.object({
+  username: z.string().min(1).max(64),
+  password: z.string().min(1).max(128),
+});
+
+const RefreshSchema = z.object({
+  refreshToken: z.string().min(1).max(2048),
+});
 
 /**
- * Creates a simple JWT-like token (header.payload.signature).
- * Uses the same format as decodeToken in auth.middleware.ts.
- * In production, replace with a proper JWT library (jose).
+ * Creates a signed JWT using HMAC-SHA256.
  */
-function createToken(sub: string, role: string, secret: string, expirySeconds: number): string {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-
-  const payload = Buffer.from(
-    JSON.stringify({
-      sub,
-      role,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + expirySeconds,
-    })
-  ).toString("base64url");
-
-  // Simplified HMAC-like signature using secret + payload hash
-  const signature = Buffer.from(`${header}.${payload}.${secret}`).toString("base64url");
-
-  return `${header}.${payload}.${signature}`;
+async function createToken(
+  sub: string,
+  role: string,
+  secret: string,
+  expirySeconds: number
+): Promise<string> {
+  const jwtSecret = new TextEncoder().encode(secret);
+  const now = Math.floor(Date.now() / 1000);
+  return new jose.SignJWT({ sub, role, iat: now })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(now + expirySeconds)
+    .sign(jwtSecret);
 }
 
-export function createAuthRoutes(config: AuthConfig): Hono {
+export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}): Hono {
   const app = new Hono();
+
+  /**
+   * GET /api/auth/csrf-token
+   * Issues a fresh CSRF token as a non-HttpOnly cookie (XSRF-TOKEN).
+   * Browser clients must call this once after login and then echo the token
+   * value in the X-CSRF-Token header on every state-changing request.
+   * No authentication required — the token is tied to the browser session
+   * via the cookie, not to a user identity.
+   */
+  app.get("/csrf-token", (ctx) => {
+    const token = generateCsrfToken();
+    setCsrfCookie(ctx, token, csrfConfig);
+    return ctx.json({ csrfToken: token });
+  });
 
   /**
    * POST /api/auth/login
@@ -40,21 +64,36 @@ export function createAuthRoutes(config: AuthConfig): Hono {
    * an "admin" token. Replace with real user validation before production.
    */
   app.post("/login", async (ctx) => {
-    const body = await ctx.req.json<{ username?: string; password?: string }>();
-    const { username, password } = body;
+    let rawBody: unknown;
+    try {
+      rawBody = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: { code: "VALIDATION_ERROR", message: "Request body must be valid JSON" } },
+        400
+      );
+    }
 
-    if (!username || !password) {
+    const result = LoginSchema.safeParse(rawBody);
+    if (!result.success) {
       return ctx.json(
         { error: { code: "VALIDATION_ERROR", message: "username and password are required" } },
         400
       );
     }
 
+    const { username, password: _password } = result.data;
+
     // TODO: Replace with real user store lookup and password hashing
     const role = username === "admin" ? "admin" : "user";
 
-    const token = createToken(username, role, config.jwtSecret, config.tokenExpiry);
-    const refreshToken = createToken(username, role, config.jwtSecret, config.refreshTokenExpiry);
+    const token = await createToken(username, role, config.jwtSecret, config.tokenExpiry);
+    const refreshToken = await createToken(
+      username,
+      role,
+      config.jwtSecret,
+      config.refreshTokenExpiry
+    );
 
     return ctx.json({
       token,
@@ -83,26 +122,22 @@ export function createAuthRoutes(config: AuthConfig): Hono {
     }
 
     const token = authHeader.slice(7);
+    const jwtSecret = new TextEncoder().encode(config.jwtSecret);
     try {
-      const parts = token.split(".");
-      if (parts.length !== 3) {
-        throw new Error("Invalid token format");
-      }
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as {
+      const { payload } = await jose.jwtVerify(token, jwtSecret, {
+        algorithms: ["HS256", "HS384", "HS512"],
+      });
+      const { sub, role, iat, exp } = payload as {
         sub: string;
         role: string;
         iat: number;
         exp: number;
       };
-
-      if (payload.exp < Math.floor(Date.now() / 1000)) {
+      return ctx.json({ user: { sub, role, iat, exp } });
+    } catch (error) {
+      if (error instanceof jose.errors.JWTExpired) {
         return ctx.json({ error: { code: "AUTHENTICATION_ERROR", message: "Token expired" } }, 401);
       }
-
-      return ctx.json({
-        user: { sub: payload.sub, role: payload.role, iat: payload.iat, exp: payload.exp },
-      });
-    } catch {
       return ctx.json({ error: { code: "AUTHENTICATION_ERROR", message: "Invalid token" } }, 401);
     }
   });
@@ -112,42 +147,45 @@ export function createAuthRoutes(config: AuthConfig): Hono {
    * Accepts a refresh token and returns a new access token.
    */
   app.post("/refresh", async (ctx) => {
-    const body = await ctx.req.json<{ refreshToken?: string }>();
-    const { refreshToken } = body;
+    let rawBody: unknown;
+    try {
+      rawBody = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: { code: "VALIDATION_ERROR", message: "Request body must be valid JSON" } },
+        400
+      );
+    }
 
-    if (!refreshToken) {
+    const result = RefreshSchema.safeParse(rawBody);
+    if (!result.success) {
       return ctx.json(
         { error: { code: "VALIDATION_ERROR", message: "refreshToken is required" } },
         400
       );
     }
 
+    const { refreshToken } = result.data;
+    const jwtSecret = new TextEncoder().encode(config.jwtSecret);
     try {
-      const parts = refreshToken.split(".");
-      if (parts.length !== 3) {
-        throw new Error("Invalid token format");
-      }
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as {
-        sub: string;
-        role: string;
-        exp: number;
-      };
-
-      if (payload.exp < Math.floor(Date.now() / 1000)) {
-        return ctx.json(
-          { error: { code: "AUTHENTICATION_ERROR", message: "Refresh token expired" } },
-          401
-        );
-      }
-
-      const newToken = createToken(payload.sub, payload.role, config.jwtSecret, config.tokenExpiry);
+      const { payload } = await jose.jwtVerify(refreshToken, jwtSecret, {
+        algorithms: ["HS256", "HS384", "HS512"],
+      });
+      const { sub, role } = payload as { sub: string; role: string };
+      const newToken = await createToken(sub, role, config.jwtSecret, config.tokenExpiry);
 
       return ctx.json({
         token: newToken,
         expiresIn: config.tokenExpiry,
         tokenType: "Bearer",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof jose.errors.JWTExpired) {
+        return ctx.json(
+          { error: { code: "AUTHENTICATION_ERROR", message: "Refresh token expired" } },
+          401
+        );
+      }
       return ctx.json(
         { error: { code: "AUTHENTICATION_ERROR", message: "Invalid refresh token" } },
         401
