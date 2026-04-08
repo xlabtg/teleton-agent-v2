@@ -230,7 +230,7 @@ export async function getTonPrice(): Promise<{
     const response = await tonapiFetch(`/rates?tokens=ton&currencies=usd`);
 
     if (response.ok) {
-      const data = await response.json();
+      const data = (await response.json()) as { rates?: { TON?: { prices?: { USD?: number } } } };
       const price = data?.rates?.TON?.prices?.USD;
       if (typeof price === "number" && price > 0) {
         _tonPriceCache = { usd: price, source: "TonAPI", timestamp: Date.now() };
@@ -251,7 +251,7 @@ export async function getTonPrice(): Promise<{
       throw new Error(`CoinGecko API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, Record<string, unknown>>;
     const price = data["the-open-network"]?.usd;
     if (typeof price === "number" && price > 0) {
       _tonPriceCache = { usd: price, source: "CoinGecko", timestamp: Date.now() };

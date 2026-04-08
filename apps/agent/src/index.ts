@@ -14,8 +14,7 @@ import {
   SQLiteTaskRepository,
 } from "@teleton/infrastructure/database/sqlite.adapter.js";
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
-import { serve } from "@hono/node-server";
-import { createServer } from "@teleton/api/server.js";
+import { createServer, startServer } from "@teleton/api/server.js";
 import { appConfigSchema } from "../../../configs/config.schema.js";
 
 export class TeletonApp {
@@ -60,7 +59,7 @@ export class TeletonApp {
     console.log("✅ Agent runtime created");
 
     // 5. Start API server
-    const app = createServer({
+    const serverConfig = {
       port: config.api.port,
       host: config.api.host,
       auth: {
@@ -73,21 +72,11 @@ export class TeletonApp {
         rateLimitMax: config.security.rateLimitMax,
         corsOrigins: config.api.cors ?? [],
       },
-    });
+      tls: config.api.tls,
+    };
 
-    await new Promise<void>((resolveServer) => {
-      serve(
-        {
-          fetch: app.fetch,
-          port: config.api.port,
-          hostname: config.api.host,
-        },
-        () => {
-          console.log(`✅ API server started on http://${config.api.host}:${config.api.port}`);
-          resolveServer();
-        }
-      );
-    });
+    const app = createServer(serverConfig);
+    await startServer(app, serverConfig);
 
     // 6. Mark as running
     this.running = true;
@@ -142,6 +131,13 @@ export class TeletonApp {
             port: validated.api.port,
             host: validated.api.host,
             cors: validated.api.cors,
+            tls: validated.api.tls
+              ? {
+                  keyPath: validated.api.tls.key_path,
+                  certPath: validated.api.tls.cert_path,
+                  httpRedirectPort: validated.api.tls.http_redirect_port,
+                }
+              : undefined,
           },
           security: {
             jwtSecret: validated.security.jwt_secret ?? crypto.randomUUID(),

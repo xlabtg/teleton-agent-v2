@@ -27,10 +27,23 @@ export const databaseConfigSchema = z.object({
   path: z.string().default("./data/teleton.db"),
 });
 
+export const tlsConfigSchema = z.object({
+  key_path: z.string(),
+  cert_path: z.string(),
+  http_redirect_port: z.number().int().min(1).max(65535).optional(),
+});
+
 export const apiConfigSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3000),
   host: z.string().default("0.0.0.0"),
-  cors: z.array(z.string()).default(["http://localhost:5173"]),
+  cors: z
+    .array(z.string())
+    .refine((origins) => !origins.includes("*"), {
+      message:
+        'CORS misconfiguration: wildcard origin "*" is not allowed. Specify explicit origins instead.',
+    })
+    .default(["http://localhost:5173"]),
+  tls: tlsConfigSchema.optional(),
 });
 
 export const securityConfigSchema = z.object({
@@ -55,5 +68,6 @@ export const appConfigSchema = z.object({
   agent: agentConfigSchema.default({}),
 });
 
+export type TlsConfigOutput = z.output<typeof tlsConfigSchema>;
 export type AppConfigInput = z.input<typeof appConfigSchema>;
 export type AppConfigOutput = z.output<typeof appConfigSchema>;

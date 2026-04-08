@@ -554,7 +554,7 @@ export class WebUIServer {
             const url = `http://${info.address}:${info.port}`;
 
             log.info(`WebUI server running`);
-            log.info(`URL: ${url}/auth/exchange?token=${this.authToken}`);
+            log.info(`URL: ${url}/auth/exchange?token=<token>`);
             log.info(`Token: ${maskToken(this.authToken)} (use Bearer header for API access)`);
             resolve();
           }
