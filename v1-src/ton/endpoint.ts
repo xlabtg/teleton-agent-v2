@@ -23,7 +23,7 @@ interface OrbsNode {
 
 async function discoverOrbsEndpoint(): Promise<string> {
   const res = await fetch(ORBS_TOPOLOGY_URL, { signal: AbortSignal.timeout(5_000) });
-  const nodes: OrbsNode[] = await res.json();
+  const nodes = (await res.json()) as OrbsNode[];
 
   const healthy = nodes.filter(
     (n) => n.Healthy === "1" && n.Weight > 0 && n.Mngr?.health?.["v2-mainnet"]

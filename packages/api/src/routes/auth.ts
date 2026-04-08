@@ -5,12 +5,22 @@
 
 import * as jose from "jose";
 import { Hono } from "hono";
+import { z } from "zod";
 import type { AuthConfig } from "../middleware/auth.middleware.js";
 import {
   generateCsrfToken,
   setCsrfCookie,
   type CsrfConfig,
 } from "../middleware/csrf.middleware.js";
+
+const LoginSchema = z.object({
+  username: z.string().min(1).max(64),
+  password: z.string().min(1).max(128),
+});
+
+const RefreshSchema = z.object({
+  refreshToken: z.string().min(1).max(2048),
+});
 
 /**
  * Creates a signed JWT using HMAC-SHA256.
@@ -54,15 +64,25 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
    * an "admin" token. Replace with real user validation before production.
    */
   app.post("/login", async (ctx) => {
-    const body = await ctx.req.json<{ username?: string; password?: string }>();
-    const { username, password } = body;
+    let rawBody: unknown;
+    try {
+      rawBody = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: { code: "VALIDATION_ERROR", message: "Request body must be valid JSON" } },
+        400
+      );
+    }
 
-    if (!username || !password) {
+    const result = LoginSchema.safeParse(rawBody);
+    if (!result.success) {
       return ctx.json(
         { error: { code: "VALIDATION_ERROR", message: "username and password are required" } },
         400
       );
     }
+
+    const { username, password: _password } = result.data;
 
     // TODO: Replace with real user store lookup and password hashing
     const role = username === "admin" ? "admin" : "user";
@@ -127,16 +147,25 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
    * Accepts a refresh token and returns a new access token.
    */
   app.post("/refresh", async (ctx) => {
-    const body = await ctx.req.json<{ refreshToken?: string }>();
-    const { refreshToken } = body;
+    let rawBody: unknown;
+    try {
+      rawBody = await ctx.req.json();
+    } catch {
+      return ctx.json(
+        { error: { code: "VALIDATION_ERROR", message: "Request body must be valid JSON" } },
+        400
+      );
+    }
 
-    if (!refreshToken) {
+    const result = RefreshSchema.safeParse(rawBody);
+    if (!result.success) {
       return ctx.json(
         { error: { code: "VALIDATION_ERROR", message: "refreshToken is required" } },
         400
       );
     }
 
+    const { refreshToken } = result.data;
     const jwtSecret = new TextEncoder().encode(config.jwtSecret);
     try {
       const { payload } = await jose.jwtVerify(refreshToken, jwtSecret, {

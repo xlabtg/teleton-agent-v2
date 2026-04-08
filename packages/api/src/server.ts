@@ -10,6 +10,7 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createDocsRoutes } from "./routes/docs.js";
 import {
   createRateLimitMiddleware,
+  createBodySizeLimitMiddleware,
   createAuthRateLimitMiddleware,
   securityHeadersMiddleware,
   requestIdMiddleware,
@@ -35,6 +36,7 @@ export function createServer(config: ServerConfig): Hono {
   // Global middleware
   app.use("*", requestIdMiddleware());
   app.use("*", securityHeadersMiddleware());
+  app.use("*", createBodySizeLimitMiddleware(config.security));
   app.use("*", createRateLimitMiddleware(config.security));
   // Apply stricter rate limiting to auth endpoints before the auth middleware
   // to prevent brute-force attacks and credential stuffing.
