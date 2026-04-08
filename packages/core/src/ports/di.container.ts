@@ -43,6 +43,11 @@ export interface AppConfig {
     port: number;
     host: string;
     cors?: string[];
+    tls?: {
+      keyPath: string;
+      certPath: string;
+      httpRedirectPort?: number;
+    };
   };
   security: {
     jwtSecret: string;
@@ -88,7 +93,7 @@ export function createAppContainer(config: AppConfig): AppContainer {
 export function registerAdapter<K extends keyof CradleInterface>(
   container: AppContainer,
   name: K,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   implementation: any
 ): void {
   container.register(name, asClass(implementation).singleton());

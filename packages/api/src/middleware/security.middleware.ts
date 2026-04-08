@@ -50,7 +50,7 @@ export function securityHeadersMiddleware() {
     ctx.header("X-Content-Type-Options", "nosniff");
     ctx.header("X-Frame-Options", "DENY");
     ctx.header("X-XSS-Protection", "0"); // Rely on CSP instead
-    ctx.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    ctx.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
     ctx.header("Content-Security-Policy", "default-src 'self'; script-src 'self'");
     ctx.header("Referrer-Policy", "strict-origin-when-cross-origin");
     ctx.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
