@@ -5,6 +5,11 @@
 
 import { Hono } from "hono";
 import type { AuthConfig } from "../middleware/auth.middleware.js";
+import {
+  generateCsrfToken,
+  setCsrfCookie,
+  type CsrfConfig,
+} from "../middleware/csrf.middleware.js";
 
 /**
  * Creates a simple JWT-like token (header.payload.signature).
@@ -29,8 +34,22 @@ function createToken(sub: string, role: string, secret: string, expirySeconds: n
   return `${header}.${payload}.${signature}`;
 }
 
-export function createAuthRoutes(config: AuthConfig): Hono {
+export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}): Hono {
   const app = new Hono();
+
+  /**
+   * GET /api/auth/csrf-token
+   * Issues a fresh CSRF token as a non-HttpOnly cookie (XSRF-TOKEN).
+   * Browser clients must call this once after login and then echo the token
+   * value in the X-CSRF-Token header on every state-changing request.
+   * No authentication required — the token is tied to the browser session
+   * via the cookie, not to a user identity.
+   */
+  app.get("/csrf-token", (ctx) => {
+    const token = generateCsrfToken();
+    setCsrfCookie(ctx, token, csrfConfig);
+    return ctx.json({ csrfToken: token });
+  });
 
   /**
    * POST /api/auth/login

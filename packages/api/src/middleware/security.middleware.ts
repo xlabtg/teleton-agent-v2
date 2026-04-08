@@ -64,7 +64,7 @@ export function createCorsConfig(origins: string[]) {
   return {
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
     exposeHeaders: ["X-Request-Id", "Retry-After"],
     maxAge: 3600,
     credentials: true,
