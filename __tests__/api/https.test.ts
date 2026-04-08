@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, type MockInstance } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { warnIfInsecure } from "../../packages/api/src/server.js";
 
 describe("warnIfInsecure", () => {
@@ -6,6 +6,10 @@ describe("warnIfInsecure", () => {
 
   beforeEach(() => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("does not warn for localhost", () => {
