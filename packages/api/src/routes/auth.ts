@@ -49,7 +49,12 @@ export function createAuthRoutes(config: AuthConfig): Hono {
     const role = username === "admin" ? "admin" : "user";
 
     const token = await createToken(username, role, config.jwtSecret, config.tokenExpiry);
-    const refreshToken = await createToken(username, role, config.jwtSecret, config.refreshTokenExpiry);
+    const refreshToken = await createToken(
+      username,
+      role,
+      config.jwtSecret,
+      config.refreshTokenExpiry
+    );
 
     return ctx.json({
       token,

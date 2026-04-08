@@ -286,7 +286,9 @@ describe("Auth Routes", () => {
 
     it("should reject a token with a manually crafted payload (no valid signature)", async () => {
       // Attacker creates a token by base64-encoding a payload without a real signature
-      const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+      const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString(
+        "base64url"
+      );
       const payload = Buffer.from(
         JSON.stringify({ sub: "attacker", role: "admin", iat: 1000000, exp: 9999999999 })
       ).toString("base64url");
