@@ -3,8 +3,14 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 /** Cookie name for HttpOnly session */
 export const COOKIE_NAME = "teleton_session";
 
-/** Max age for session cookie (7 days in seconds) */
-export const COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
+/** Cookie name for tracking last activity timestamp (non-HttpOnly so JS can read for UX) */
+export const ACTIVITY_COOKIE_NAME = "teleton_last_activity";
+
+/** Max age for session cookie (24 hours in seconds, per security best practices) */
+export const COOKIE_MAX_AGE = 24 * 60 * 60;
+
+/** Default session inactivity timeout (30 minutes in seconds) */
+export const DEFAULT_INACTIVITY_TIMEOUT_SECONDS = 30 * 60;
 
 /** Generate a 32-byte base64url token for API auth */
 export function generateToken(): string {
