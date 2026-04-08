@@ -69,6 +69,27 @@ embedding:
   # anthropic = uses Voyage API via your agent.api_key
   # none     = FTS5 full-text search only (no vector embeddings)
 
+# API server configuration
+# The REST API server listens on host:port for incoming requests.
+# IMPORTANT: When host is set to anything other than localhost/127.x.x.x/::1,
+#            TLS should be enabled to protect credentials in transit.
+# api:
+#   port: 3000                        # TCP port to listen on
+#   host: "0.0.0.0"                   # Bind address (0.0.0.0 = all interfaces)
+#   cors:                             # Allowed CORS origins
+#     - "https://yourdomain.com"
+#
+#   # TLS/HTTPS configuration (recommended for production)
+#   # Use this when not running behind a TLS-terminating reverse proxy.
+#   # For most deployments, a reverse proxy (nginx, Caddy) handling TLS is simpler.
+#   tls:
+#     key_path: "/etc/teleton/tls/key.pem"    # Path to TLS private key
+#     cert_path: "/etc/teleton/tls/cert.pem"  # Path to TLS certificate
+#     http_redirect_port: 80                  # HTTP port that redirects to HTTPS (optional)
+#
+# Development (default): HTTP on localhost — safe without TLS
+# Production: Use HTTPS or place behind a TLS-terminating reverse proxy (nginx/Caddy)
+
 # Optional: WebUI dashboard (disabled by default for security)
 webui:
   enabled: false                      # Enable web dashboard
