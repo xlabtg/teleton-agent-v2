@@ -16,8 +16,17 @@ import { createLogger } from "../utils/logger.js";
 import { groqTranscribe } from "../providers/groq/GroqSTTProvider.js";
 import { generateSpeech } from "../services/tts.js";
 import { unlinkSync } from "fs";
+import { InputValidator } from "../../packages/security/src/input-validator.js";
 
 const log = createLogger("Telegram");
+
+/** Maximum allowed text length for an incoming Telegram message */
+const MAX_MESSAGE_TEXT_LENGTH = 32_768;
+
+const messageTextValidator = new InputValidator({
+  maxInputLength: MAX_MESSAGE_TEXT_LENGTH,
+  sanitizeControlChars: true,
+});
 import type { PluginMessageEvent } from "@teleton-agent/sdk";
 
 export interface MessageContext {
@@ -290,6 +299,22 @@ export class MessageHandler {
     log.debug(
       `📨 [Handler] Received ${msgType} message ${message.id} from ${message.senderId} (mentions: ${message.mentionsMe})`
     );
+
+    // 0b. Validate and sanitize incoming text to guard against oversized or
+    //     malformed payloads before any further processing or storage.
+    if (message.text) {
+      try {
+        const validated = messageTextValidator.validate(message.text, "message_text");
+        // Replace text with the sanitized version (control chars stripped, NFC normalised)
+        message = { ...message, text: validated.value };
+      } catch {
+        log.warn(
+          { messageId: message.id, senderId: message.senderId },
+          "Dropping message: text failed input validation"
+        );
+        return;
+      }
+    }
 
     // 1. Store incoming message to feed FIRST (even if we won't respond)
     await this.storeTelegramMessage(message, false);

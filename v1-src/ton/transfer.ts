@@ -6,6 +6,11 @@ import { withTxLock } from "./tx-lock.js";
 
 const log = createLogger("TON");
 
+/** Maximum transfer amount: 1 billion TON (prevents accidental drain) */
+const MAX_TON_AMOUNT = 1_000_000_000;
+/** Maximum comment length in bytes (TON cell body limit) */
+const MAX_COMMENT_LENGTH = 127;
+
 export interface SendTonParams {
   toAddress: string;
   amount: number;
@@ -19,7 +24,25 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
       const { toAddress, amount, comment = "", bounce = false } = params;
 
       if (!Number.isFinite(amount) || amount <= 0) {
-        log.error({ amount }, "Invalid transfer amount");
+        log.error({ amount }, "Invalid transfer amount: must be a positive finite number");
+        return null;
+      }
+
+      if (amount > MAX_TON_AMOUNT) {
+        log.error({ amount }, `Transfer amount exceeds maximum allowed (${MAX_TON_AMOUNT} TON)`);
+        return null;
+      }
+
+      if (typeof comment !== "string") {
+        log.error("Transfer comment must be a string");
+        return null;
+      }
+
+      if (Buffer.byteLength(comment, "utf8") > MAX_COMMENT_LENGTH) {
+        log.error(
+          { commentLength: Buffer.byteLength(comment, "utf8") },
+          "Transfer comment exceeds maximum length"
+        );
         return null;
       }
 

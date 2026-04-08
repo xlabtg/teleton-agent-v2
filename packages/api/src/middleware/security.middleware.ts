@@ -10,6 +10,8 @@ export interface SecurityConfig {
   rateLimitWindow: number; // ms
   rateLimitMax: number; // requests per window
   corsOrigins: string[];
+  /** Maximum allowed request body size in bytes. Default: 1_048_576 (1 MB) */
+  maxBodySize?: number;
 }
 
 /**
@@ -68,6 +70,25 @@ export function createCorsConfig(origins: string[]) {
     exposeHeaders: ["X-Request-Id", "Retry-After"],
     maxAge: 3600,
     credentials: true,
+  };
+}
+
+/**
+ * Request body size limit middleware.
+ * Rejects requests whose Content-Length exceeds the configured maximum.
+ * Guards against DoS attacks via large payloads.
+ */
+export function createBodySizeLimitMiddleware(config: SecurityConfig) {
+  const limit = config.maxBodySize ?? 1_048_576; // default 1 MB
+  return async (ctx: Context, next: Next): Promise<Response | void> => {
+    const contentLength = ctx.req.header("content-length");
+    if (contentLength !== undefined && parseInt(contentLength, 10) > limit) {
+      return ctx.json(
+        { error: { code: "PAYLOAD_TOO_LARGE", message: "Request body exceeds size limit" } },
+        413 as never
+      );
+    }
+    await next();
   };
 }
 

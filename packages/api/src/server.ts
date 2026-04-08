@@ -10,6 +10,7 @@ import { createAuthRoutes } from "./routes/auth.js";
 import { createDocsRoutes } from "./routes/docs.js";
 import {
   createRateLimitMiddleware,
+  createBodySizeLimitMiddleware,
   securityHeadersMiddleware,
   requestIdMiddleware,
   type SecurityConfig,
@@ -30,6 +31,7 @@ export function createServer(config: ServerConfig): Hono {
   // Global middleware
   app.use("*", requestIdMiddleware());
   app.use("*", securityHeadersMiddleware());
+  app.use("*", createBodySizeLimitMiddleware(config.security));
   app.use("*", createRateLimitMiddleware(config.security));
   app.use("/api/*", createAuthMiddleware(config.auth));
 
