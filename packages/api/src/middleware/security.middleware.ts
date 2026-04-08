@@ -4,7 +4,7 @@
  */
 
 import type { Context, Next } from "hono";
-import { RateLimitError } from "@teleton/core/errors/domain-errors.js";
+import { RateLimiter } from "@teleton/security/rate-limiter.js";
 
 export interface SecurityConfig {
   rateLimitWindow: number; // ms
@@ -13,26 +13,68 @@ export interface SecurityConfig {
 }
 
 /**
- * In-memory rate limiter.
- * For production, use Redis-backed rate limiting.
+ * Extract the real client IP from the request context.
+ *
+ * When `TRUSTED_PROXIES` env var is set (comma-separated CIDRs or IPs), the
+ * first IP from `x-forwarded-for` is used. Otherwise we prefer `x-real-ip`
+ * and fall back to the raw remote address. This prevents trivial spoofing
+ * when the server is not behind a trusted reverse proxy.
  */
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+function getClientIP(ctx: Context): string {
+  const trustedProxies = process.env["TRUSTED_PROXIES"]
+    ? process.env["TRUSTED_PROXIES"].split(",").map((s) => s.trim())
+    : [];
 
-export function createRateLimitMiddleware(config: SecurityConfig) {
+  const xForwardedFor = ctx.req.header("x-forwarded-for");
+  const xRealIP = ctx.req.header("x-real-ip");
+
+  if (trustedProxies.length > 0 && xForwardedFor) {
+    // Use the leftmost (client) IP from X-Forwarded-For
+    return xForwardedFor.split(",")[0]!.trim();
+  }
+
+  if (xRealIP) {
+    return xRealIP.trim();
+  }
+
+  // Hono does not expose remoteAddress in all runtimes; fall back to unknown
+  return "unknown";
+}
+
+/**
+ * Create a RateLimiter instance from a SecurityConfig.
+ * Exported so it can be instantiated and injected in tests.
+ */
+export function createRateLimiter(config: SecurityConfig): RateLimiter {
+  return new RateLimiter({
+    windows: [{ windowMs: config.rateLimitWindow, maxRequests: config.rateLimitMax }],
+  });
+}
+
+/**
+ * Rate-limit middleware backed by the shared RateLimiter class.
+ *
+ * Sets the standard X-RateLimit-* response headers and throws a
+ * RateLimitError (HTTP 429) when the limit is exceeded.
+ */
+export function createRateLimitMiddleware(config: SecurityConfig, limiter?: RateLimiter) {
+  const rl = limiter ?? createRateLimiter(config);
+
   return async (ctx: Context, next: Next) => {
-    const key = ctx.req.header("x-forwarded-for") ?? "unknown";
-    const now = Date.now();
-    const entry = rateLimitStore.get(key);
+    const key = getClientIP(ctx);
+    const status = rl.consume(key);
 
-    if (!entry || entry.resetAt < now) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + config.rateLimitWindow });
-    } else {
-      entry.count++;
-      if (entry.count > config.rateLimitMax) {
-        const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-        ctx.header("Retry-After", String(retryAfter));
-        throw new RateLimitError(retryAfter);
-      }
+    // Always send rate-limit headers so clients can self-throttle
+    ctx.header("X-RateLimit-Limit", String(config.rateLimitMax));
+    ctx.header("X-RateLimit-Remaining", String(status.remaining));
+    ctx.header("X-RateLimit-Reset", String(Math.ceil(status.resetAt / 1000)));
+
+    if (!status.allowed) {
+      ctx.header("Retry-After", String(status.retryAfterSeconds));
+      // RateLimiter.check throws RateLimitError; we replicate it here to avoid
+      // a second consume() call and to keep the RateLimitError import local.
+      const { RateLimitError } = await import("@teleton/core/errors/domain-errors.js");
+      throw new RateLimitError(status.retryAfterSeconds);
     }
 
     await next();
@@ -65,7 +107,13 @@ export function createCorsConfig(origins: string[]) {
     origin: origins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
-    exposeHeaders: ["X-Request-Id", "Retry-After"],
+    exposeHeaders: [
+      "X-Request-Id",
+      "Retry-After",
+      "X-RateLimit-Limit",
+      "X-RateLimit-Remaining",
+      "X-RateLimit-Reset",
+    ],
     maxAge: 3600,
     credentials: true,
   };
