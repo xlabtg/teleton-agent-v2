@@ -1,8 +1,6 @@
 {
   "critical": true,
   "allowlist": [
-    "GHSA-5rq4-664w-9x2c",
-    "GHSA-m7jm-9gc2-mpf2",
     "GHSA-27v5-c462-wpq7",
     "GHSA-3v7f-55p6-f55p",
     "GHSA-48c2-rrv3-qjmp",
@@ -12,6 +10,12 @@
     "GHSA-f886-m6hf-6m8v",
     "GHSA-j3q9-mxjg-w52f",
     "GHSA-p9ff-h696-f583",
-    "GHSA-v3rj-xjv7-4jmq"
+    "GHSA-v3rj-xjv7-4jmq",
+    "GHSA-26pp-8wgv-hjvm",
+    "GHSA-92pp-h63x-v22m",
+    "GHSA-r5rp-j6wh-rvv4",
+    "GHSA-wmmm-f939-6g9c",
+    "GHSA-xf4j-xp2r-rqqx",
+    "GHSA-xpcf-pg52-r92g"
   ]
 }

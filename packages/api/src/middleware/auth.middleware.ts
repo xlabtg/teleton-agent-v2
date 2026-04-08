@@ -3,6 +3,7 @@
  * Implements JWT validation and role-based access control (RBAC).
  */
 
+import * as jose from "jose";
 import type { Context, Next } from "hono";
 import { AuthenticationError, ForbiddenError } from "@teleton/core/errors/domain-errors.js";
 
@@ -36,24 +37,20 @@ const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
 };
 
 /**
- * Simple JWT-like token verification.
- * In production, use a proper JWT library (jose).
+ * Verifies a JWT token's signature and returns its payload.
+ * Uses jose to cryptographically verify the HMAC-SHA256 signature.
  */
-function decodeToken(token: string, _secret: string): TokenPayload {
+async function decodeToken(token: string, secret: string): Promise<TokenPayload> {
+  const jwtSecret = new TextEncoder().encode(secret);
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      throw new AuthenticationError("Invalid token format");
-    }
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as TokenPayload;
-
-    if (payload.exp && payload.exp < Date.now() / 1000) {
+    const { payload } = await jose.jwtVerify(token, jwtSecret, {
+      algorithms: ["HS256", "HS384", "HS512"],
+    });
+    return payload as unknown as TokenPayload;
+  } catch (error) {
+    if (error instanceof jose.errors.JWTExpired) {
       throw new AuthenticationError("Token expired");
     }
-
-    return payload;
-  } catch (error) {
-    if (error instanceof AuthenticationError) throw error;
     throw new AuthenticationError("Invalid token");
   }
 }
@@ -86,7 +83,7 @@ export function createAuthMiddleware(config: AuthConfig) {
     }
 
     const token = authHeader.slice(7);
-    const payload = decodeToken(token, config.jwtSecret);
+    const payload = await decodeToken(token, config.jwtSecret);
 
     if (!hasPermission(payload.role, ctx.req.path)) {
       throw new ForbiddenError("Insufficient permissions for this endpoint");
