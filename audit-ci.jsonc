@@ -1,7 +1,13 @@
 {
-  "critical": true,
+  "moderate": true,
   "allowlist": [
     "GHSA-5rq4-664w-9x2c",
-    "GHSA-m7jm-9gc2-mpf2"
+    "GHSA-m7jm-9gc2-mpf2",
+    // Vite dev server path traversal (GHSA-4w7w-66w2-5vf9) and esbuild cross-origin
+    // (GHSA-67mh-4wv8-2f99) - both affect only the development server, not production
+    // code. They exist in vite@5.x pulled in as peer dep of @vitejs/plugin-react.
+    // Fix requires upgrading to vite v7+ which is a breaking change for the web workspace.
+    "GHSA-4w7w-66w2-5vf9",
+    "GHSA-67mh-4wv8-2f99"
   ]
 }

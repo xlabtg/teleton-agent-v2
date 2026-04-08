@@ -29,6 +29,10 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN is not set, skipping deployment."
+            exit 0
+          fi
           npm install -g vercel@latest
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             url=$(vercel deploy --prod --token="$VERCEL_TOKEN")
