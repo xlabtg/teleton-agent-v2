@@ -52,7 +52,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml}\"",
     "typecheck": "tsc --noEmit",
     "typecheck:strict": "tsc --noEmit --strict",
-    "security:audit": "audit-ci --moderate",
+    "security:audit": "audit-ci --moderate --config audit-ci.jsonc",
     "security:sca": "npm audit --production",
     "circular": "madge --circular --extensions ts src/",
     "unused": "knip",
