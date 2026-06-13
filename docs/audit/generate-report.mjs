@@ -42,6 +42,47 @@ function tally(items, key) {
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
+/**
+ * Render a GitHub-flavoured markdown table whose columns are padded to a
+ * uniform width, matching `prettier --check` output so the generated report
+ * stays lint-clean across regenerations. `headers` and each row in `rows` are
+ * arrays of already-escaped cell strings; every column is left-aligned.
+ */
+function mdTable(headers, rows) {
+  const width = headers.map((h, i) =>
+    Math.max(3, h.length, ...rows.map((r) => r[i].length))
+  );
+  const fmt = (cells) => "| " + cells.map((c, i) => c.padEnd(width[i])).join(" | ") + " |";
+  const sep = "| " + width.map((w) => "-".repeat(w)).join(" | ") + " |";
+  return [fmt(headers), sep, ...rows.map(fmt)];
+}
+
+/**
+ * Escape markdown inline-significant characters in a free-text table cell so
+ * the text renders literally (e.g. `_field` and `*.pem` stay verbatim instead
+ * of being parsed as emphasis) and the output is stable under `prettier
+ * --check`. Underscores are escaped only at word boundaries — CommonMark (and
+ * prettier) never treat an intra-word `_` such as `GITHUB_TOKEN` as emphasis,
+ * so escaping those would diverge from `prettier --check`. Do not apply to
+ * cells that are intentional code spans or links.
+ */
+const isAlnum = (ch) => ch !== undefined && /[A-Za-z0-9]/.test(ch);
+function esc(value) {
+  const s = String(value ?? "");
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\" || c === "`" || c === "|" || c === "*") {
+      out += "\\" + c; // always emphasis/table-significant
+    } else if (c === "_" && (!isAlnum(s[i - 1]) || !isAlnum(s[i + 1]))) {
+      out += "\\_"; // underscore only at a word boundary
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
 const findings = loadFindings();
 const confirmed = findings.filter((f) => f.status !== "rejected");
 const rejected = findings.filter((f) => f.status === "rejected");
@@ -88,27 +129,30 @@ L(`- **Rejected / verified-safe:** ${rejected.length}`);
 L();
 L("### By severity → stage");
 L();
-L("| Severity | Count | Implementation stage |");
-L("|----------|-------|-----------------------|");
 const STAGE = {
   critical: "Stage 1 — Critical: Security & Data Integrity",
   high: "Stage 2 — High: Correctness & Reliability",
   medium: "Stage 3 — Medium: Hardening & Robustness",
   low: "Stage 4 — Low: Tech Debt & Polish",
 };
-for (const [s, n] of sevCounts) L(`| ${SEV_EMOJI[s]} ${s.toUpperCase()} | ${n} | ${STAGE[s]} |`);
+mdTable(
+  ["Severity", "Count", "Implementation stage"],
+  sevCounts.map(([s, n]) => [`${SEV_EMOJI[s]} ${s.toUpperCase()}`, String(n), STAGE[s]])
+).forEach(L);
 L();
 L("### By category");
 L();
-L("| Category | Count |");
-L("|----------|-------|");
-for (const [c, n] of tally(confirmed, "category")) L(`| \`${c}\` | ${n} |`);
+mdTable(
+  ["Category", "Count"],
+  tally(confirmed, "category").map(([c, n]) => ["`" + c + "`", String(n)])
+).forEach(L);
 L();
 L("### By component");
 L();
-L("| Component | Count |");
-L("|-----------|-------|");
-for (const [a, n] of tally(confirmed, "areas")) L(`| \`area:${a}\` | ${n} |`);
+mdTable(
+  ["Component", "Count"],
+  tally(confirmed, "areas").map(([a, n]) => ["`area:" + a + "`", String(n)])
+).forEach(L);
 L();
 
 for (const sev of SEV_ORDER) {
@@ -116,14 +160,18 @@ for (const sev of SEV_ORDER) {
   if (!group.length) continue;
   L(`## ${SEV_EMOJI[sev]} ${sev.toUpperCase()} (${group.length})`);
   L();
-  L("| # | Title | Category | Component | Location | Issue |");
-  L("|---|-------|----------|-----------|----------|-------|");
-  group.forEach((f, i) => {
+  const rows = group.map((f, i) => {
     const m = manifest[f.slug];
-    const link = m ? `[#${m.number}](${m.url})` : "—";
-    const loc = "`" + f.location + "`";
-    L(`| ${i + 1} | ${f.title.replace(/\|/g, "\\|")} | \`${f.category}\` | ${f.areas.map((a) => "`" + a + "`").join(" ")} | ${loc} | ${link} |`);
+    return [
+      String(i + 1),
+      esc(f.title),
+      "`" + f.category + "`",
+      f.areas.map((a) => "`" + a + "`").join(" "),
+      "`" + f.location + "`",
+      m ? `[#${m.number}](${m.url})` : "—",
+    ];
   });
+  mdTable(["#", "Title", "Category", "Component", "Location", "Issue"], rows).forEach(L);
   L();
 }
 
@@ -132,12 +180,14 @@ if (rejected.length) {
   L();
   L("Suspected issues that were investigated and found **not** to be defects.");
   L();
-  L("| Title | Component | Reason |");
-  L("|-------|-----------|--------|");
-  for (const f of rejected)
-    L(`| ${f.title.replace(/\|/g, "\\|")} | ${f.areas.map((a) => "`" + a + "`").join(" ")} | ${(f.rejectionReason ?? "").replace(/\|/g, "\\|")} |`);
+  const rows = rejected.map((f) => [
+    esc(f.title),
+    f.areas.map((a) => "`" + a + "`").join(" "),
+    esc(f.rejectionReason),
+  ]);
+  mdTable(["Title", "Component", "Reason"], rows).forEach(L);
   L();
 }
 
-writeFileSync(OUT, lines.join("\n") + "\n");
+writeFileSync(OUT, lines.join("\n").trimEnd() + "\n");
 console.log(`Wrote ${OUT} — ${confirmed.length} confirmed, ${rejected.length} rejected.`);

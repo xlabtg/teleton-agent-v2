@@ -69,6 +69,7 @@ nothing meaningful to cite.>
 ```
 
 Rules:
+
 - Be precise and verifiable. Quote real code; never fabricate line numbers or APIs.
 - Keep each body focused on **one** defect. Only merge two list items into one
   issue if they are literally the same root cause at the same location.
