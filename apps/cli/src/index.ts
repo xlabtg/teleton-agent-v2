@@ -4,9 +4,12 @@
  */
 
 import { Command } from "commander";
-import { TeletonApp } from "../../agent/src/index.js";
 
 const program = new Command();
+
+type ConfigOptions = {
+  config?: string;
+};
 
 program
   .name("teleton")
@@ -17,7 +20,8 @@ program
   .command("start")
   .description("Start the Teleton agent")
   .option("-c, --config <path>", "Path to configuration file")
-  .action(async (options) => {
+  .action(async (options: ConfigOptions) => {
+    const { TeletonApp } = await import("../../agent/src/index.js");
     const app = new TeletonApp();
     await app.start(options.config);
   });
@@ -46,10 +50,10 @@ program
   .command("config")
   .description("Show current configuration")
   .option("-c, --config <path>", "Path to configuration file")
-  .action(async (options) => {
+  .action(async (options: ConfigOptions) => {
     console.log("📋 Configuration:");
     console.log(`  Config path: ${options.config ?? "~/.teleton-v2/config.yaml"}`);
     // TODO: Load and display parsed config (with secrets masked)
   });
 
-program.parse();
+await program.parseAsync();
