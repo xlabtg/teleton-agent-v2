@@ -4,6 +4,7 @@
  */
 
 import type { Context, Next } from "hono";
+import { isIP } from "node:net";
 import { RateLimiter } from "@teleton/security/rate-limiter.js";
 
 export interface SecurityConfig {
@@ -27,29 +28,113 @@ export interface AuthRateLimitConfig {
  * Extract the real client IP from the request context.
  *
  * When `TRUSTED_PROXIES` env var is set (comma-separated CIDRs or IPs), the
- * first IP from `x-forwarded-for` is used. Otherwise we prefer `x-real-ip`
- * and fall back to the raw remote address. This prevents trivial spoofing
- * when the server is not behind a trusted reverse proxy.
+ * first IP from `x-forwarded-for` is used only if the immediate peer is a
+ * configured trusted proxy. Otherwise we prefer the raw remote address, then
+ * `x-real-ip`. This prevents trivial spoofing when the server is not behind a
+ * trusted reverse proxy.
  */
 function getClientIP(ctx: Context): string {
   const trustedProxies = process.env["TRUSTED_PROXIES"]
-    ? process.env["TRUSTED_PROXIES"].split(",").map((s) => s.trim())
+    ? process.env["TRUSTED_PROXIES"]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
-  const xForwardedFor = ctx.req.header("x-forwarded-for");
-  const xRealIP = ctx.req.header("x-real-ip");
+  const xForwardedFor = getForwardedClientIP(ctx.req.header("x-forwarded-for"));
+  const xRealIP = normalizeIP(ctx.req.header("x-real-ip")?.trim());
+  const remoteAddress = getRemoteAddress(ctx);
+  const peerIP = remoteAddress ?? xRealIP;
 
-  if (trustedProxies.length > 0 && xForwardedFor) {
-    // Use the leftmost (client) IP from X-Forwarded-For
-    return xForwardedFor.split(",")[0]!.trim();
+  if (peerIP && trustedProxies.some((proxy) => isTrustedProxy(peerIP, proxy)) && xForwardedFor) {
+    return xForwardedFor;
   }
 
-  if (xRealIP) {
-    return xRealIP.trim();
-  }
+  if (remoteAddress) return remoteAddress;
+  if (xRealIP) return xRealIP;
 
-  // Hono does not expose remoteAddress in all runtimes; fall back to unknown
   return "unknown";
+}
+
+function getRemoteAddress(ctx: Context): string | undefined {
+  const env = ctx.env as
+    | {
+        incoming?: { socket?: { remoteAddress?: string | null } };
+        ip?: string | null;
+      }
+    | undefined;
+
+  return normalizeIP(env?.incoming?.socket?.remoteAddress?.trim()) ?? normalizeIP(env?.ip?.trim());
+}
+
+function getForwardedClientIP(header: string | undefined): string | undefined {
+  return header
+    ?.split(",")
+    .map((part) => part.trim())
+    .find(Boolean);
+}
+
+function normalizeIP(ip: string | undefined): string | undefined {
+  if (!ip) return undefined;
+  return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+
+function isTrustedProxy(peerIP: string, proxy: string): boolean {
+  if (proxy.includes("/")) {
+    return isIPInCidr(peerIP, proxy);
+  }
+
+  return normalizeIP(proxy) === peerIP;
+}
+
+function isIPInCidr(ip: string, cidr: string): boolean {
+  const [network, prefixText] = cidr.split("/");
+  const prefix = Number(prefixText);
+  const ipValue = ipToBigInt(ip);
+  const networkValue = network ? ipToBigInt(network) : undefined;
+
+  if (
+    ipValue === undefined ||
+    networkValue === undefined ||
+    ipValue.version !== networkValue.version
+  ) {
+    return false;
+  }
+
+  const bits = ipValue.version === 4 ? 32 : 128;
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > bits) {
+    return false;
+  }
+
+  const shift = BigInt(bits - prefix);
+  return ipValue.value >> shift === networkValue.value >> shift;
+}
+
+function ipToBigInt(ip: string): { version: 4 | 6; value: bigint } | undefined {
+  const normalized = normalizeIP(ip);
+  const version = normalized ? isIP(normalized) : 0;
+
+  if (!normalized || version === 0) return undefined;
+
+  if (version === 4) {
+    return { version: 4, value: ipv4ToBigInt(normalized) };
+  }
+
+  return { version: 6, value: ipv6ToBigInt(normalized) };
+}
+
+function ipv4ToBigInt(ip: string): bigint {
+  return ip.split(".").reduce((acc, part) => (acc << 8n) + BigInt(Number(part)), 0n);
+}
+
+function ipv6ToBigInt(ip: string): bigint {
+  const [head = "", tail = ""] = ip.toLowerCase().split("::");
+  const headParts = head === "" ? [] : head.split(":");
+  const tailParts = tail === "" ? [] : tail.split(":");
+  const missingParts = 8 - headParts.length - tailParts.length;
+  const parts = [...headParts, ...Array<string>(missingParts).fill("0"), ...tailParts];
+
+  return parts.reduce((acc, part) => (acc << 16n) + BigInt(parseInt(part, 16)), 0n);
 }
 
 /**
@@ -114,7 +199,7 @@ export function createAuthRateLimitMiddleware(config: AuthRateLimitConfig = {}) 
   });
 
   return async (ctx: Context, next: Next) => {
-    const ip = ctx.req.header("x-forwarded-for") ?? "unknown";
+    const ip = getClientIP(ctx);
     const path = ctx.req.path;
 
     let status;

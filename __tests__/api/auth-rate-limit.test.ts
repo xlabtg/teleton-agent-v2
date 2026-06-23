@@ -5,7 +5,7 @@
  *
  * Issue #41: No Rate Limiting on Authentication Endpoints
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { createAuthRoutes } from "../../packages/api/src/routes/auth.js";
 import { createAuthMiddleware } from "../../packages/api/src/middleware/auth.middleware.js";
@@ -26,6 +26,16 @@ const TEST_SECURITY_CONFIG = {
   rateLimitMax: 100,
   corsOrigins: [],
 };
+
+const ORIGINAL_TRUSTED_PROXIES = process.env["TRUSTED_PROXIES"];
+
+function restoreTrustedProxies() {
+  if (ORIGINAL_TRUSTED_PROXIES === undefined) {
+    delete process.env["TRUSTED_PROXIES"];
+  } else {
+    process.env["TRUSTED_PROXIES"] = ORIGINAL_TRUSTED_PROXIES;
+  }
+}
 
 /**
  * Build a test app with configurable auth rate limits.
@@ -54,13 +64,16 @@ async function login(
   app: Hono,
   ip: string,
   username = "admin",
-  password = "test"
+  password = "test",
+  headers: Record<string, string> = {}
 ): Promise<Response> {
   return app.request("/api/auth/login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-real-ip": ip,
       "x-forwarded-for": ip,
+      ...headers,
     },
     body: JSON.stringify({ username, password }),
   });
@@ -72,6 +85,7 @@ async function refresh(app: Hono, ip: string, refreshToken: string): Promise<Res
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-real-ip": ip,
       "x-forwarded-for": ip,
     },
     body: JSON.stringify({ refreshToken }),
@@ -83,7 +97,12 @@ describe("Auth Endpoint Rate Limiting (issue #41)", () => {
 
   beforeEach(() => {
     // Fresh app (and fresh in-memory RateLimiter instances) per test.
+    delete process.env["TRUSTED_PROXIES"];
     app = buildTestApp(3, 5);
+  });
+
+  afterEach(() => {
+    restoreTrustedProxies();
   });
 
   describe("POST /api/auth/login", () => {
@@ -131,6 +150,22 @@ describe("Auth Endpoint Rate Limiting (issue #41)", () => {
       // ip2 should still be allowed
       const allowed = await login(app, ip2);
       expect(allowed.status).toBe(200);
+    });
+
+    it("does not reset the login limit when x-forwarded-for is rotated without a trusted proxy", async () => {
+      const realIP = "198.51.100.10";
+
+      for (let i = 0; i < 3; i++) {
+        const res = await login(app, realIP, "admin", "test", {
+          "x-forwarded-for": `203.0.113.${i}`,
+        });
+        expect(res.status).toBe(200);
+      }
+
+      const blocked = await login(app, realIP, "admin", "test", {
+        "x-forwarded-for": "203.0.113.99",
+      });
+      expect(blocked.status).toBe(429);
     });
   });
 
