@@ -1,21 +1,17 @@
 {
-  "critical": true,
+  // CI runs `audit-ci --moderate`, so advisories at moderate severity and above
+  // fail the build. Keep this config self-consistent with that CLI flag.
+  "moderate": true,
   "allowlist": [
-    "GHSA-27v5-c462-wpq7",
-    "GHSA-3v7f-55p6-f55p",
-    "GHSA-48c2-rrv3-qjmp",
-    "GHSA-4w7w-66w2-5vf9",
-    "GHSA-67mh-4wv8-2f99",
-    "GHSA-c2c7-rcm5-vvqj",
-    "GHSA-f886-m6hf-6m8v",
-    "GHSA-j3q9-mxjg-w52f",
-    "GHSA-p9ff-h696-f583",
-    "GHSA-v3rj-xjv7-4jmq",
-    "GHSA-26pp-8wgv-hjvm",
-    "GHSA-92pp-h63x-v22m",
-    "GHSA-r5rp-j6wh-rvv4",
-    "GHSA-wmmm-f939-6g9c",
-    "GHSA-xf4j-xp2r-rqqx",
-    "GHSA-xpcf-pg52-r92g"
+    // GHSA-gv7w-rqvm-qjhr — esbuild: "Missing binary integrity verification in
+    // the Deno module enables remote code execution via NPM_CONFIG_REGISTRY".
+    // The flaw is specific to esbuild's Deno install path. This is an npm/Node
+    // project where esbuild is a build-time-only devDependency installed with
+    // package-lock integrity hashes, so the Deno binary-download vector is not
+    // reachable. The only patched release (esbuild 0.28.1) is unsupported by
+    // every current Vite release (Vite still pins esbuild ^0.25/^0.27) and
+    // breaks the Vite web build, so it cannot be adopted yet.
+    // Re-evaluate once Vite ships support for esbuild >=0.28.1. Review by 2026-09-01.
+    "GHSA-gv7w-rqvm-qjhr"
   ]
 }

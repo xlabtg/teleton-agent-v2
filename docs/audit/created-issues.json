@@ -1,0 +1,707 @@
+{
+  "api-rbac-fail-open-and-path-pattern-gap": {
+    "number": 60,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/60",
+    "title": "🟠 HIGH: RBAC is fail-open and the `/api/agents/*` pattern misses the bare `/api/agents` route"
+  },
+  "api-auth-rate-limiter-trusts-x-forwarded-for": {
+    "number": 61,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/61",
+    "title": "🟠 HIGH: Auth rate limiter keys on unverified `X-Forwarded-For`, allowing brute-force bypass"
+  },
+  "api-cli-entrypoint-missing-build-output": {
+    "number": 62,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/62",
+    "title": "🟠 HIGH: `bin/teleton.js` imports `dist/cli/index.js`, which the default build never produces"
+  },
+  "api-cors-config-built-but-never-applied": {
+    "number": 63,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/63",
+    "title": "🟡 MEDIUM: CORS config is created and validated but never applied as middleware"
+  },
+  "api-refresh-token-is-a-valid-access-token": {
+    "number": 64,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/64",
+    "title": "🟡 MEDIUM: Refresh tokens carry no `type` claim and are accepted as access tokens"
+  },
+  "api-body-size-limit-only-checks-content-length": {
+    "number": 65,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/65",
+    "title": "🟡 MEDIUM: Body-size limit only inspects `Content-Length` and is bypassed by chunked/missing header"
+  },
+  "api-server-listen-has-no-error-handler": {
+    "number": 66,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/66",
+    "title": "🟡 MEDIUM: `startServer` registers no `error` handler, so port-in-use never settles the start promise"
+  },
+  "api-swagger-ui-broken-by-global-csp": {
+    "number": 67,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/67",
+    "title": "🟡 MEDIUM: Swagger UI at `/api/docs` is blocked by the global CSP (CDN + inline scripts)"
+  },
+  "api-error-handler-drops-validation-details": {
+    "number": 68,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/68",
+    "title": "🟡 MEDIUM: Central error handler discards `ValidationError.details`, hiding which field failed"
+  },
+  "api-dev-login-accepts-any-credentials": {
+    "number": 69,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/69",
+    "title": "🟡 MEDIUM: `/api/auth/login` accepts any credentials and mints a privileged token"
+  },
+  "api-csrf-cookie-not-secure-in-production": {
+    "number": 70,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/70",
+    "title": "🟡 MEDIUM: CSRF cookie is never marked `Secure`; the agent passes no CSRF config"
+  },
+  "api-no-global-rejection-handlers-and-empty-shutdown": {
+    "number": 71,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/71",
+    "title": "🟡 MEDIUM: No `unhandledRejection`/`uncaughtException` handlers; shutdown closes no resources"
+  },
+  "api-jwt-secret-no-strength-validation-random-fallback": {
+    "number": 72,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/72",
+    "title": "🟢 LOW: JWT secret has no minimum-strength validation and silently falls back to a random UUID"
+  },
+  "api-auth-skip-list-unbounded-docs-prefix-and-dead-health-entry": {
+    "number": 73,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/73",
+    "title": "🟢 LOW: Auth skip-list uses unbounded `/api/docs` prefix and contains a dead `/api/health` rule"
+  },
+  "api-request-id-reflects-unvalidated-header": {
+    "number": 74,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/74",
+    "title": "🟢 LOW: `requestId` reflects an unvalidated `x-request-id` header into responses and logs"
+  },
+  "sec-audit-eviction-breaks-integrity-chain": {
+    "number": 75,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/75",
+    "title": "🟠 HIGH: AuditStore eviction permanently breaks hash-chain integrity verification"
+  },
+  "sec-audit-redaction-shallow-leaks-nested-secrets": {
+    "number": 76,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/76",
+    "title": "🟠 HIGH: Audit metadata redaction is shallow and shares nested objects by reference"
+  },
+  "sec-cef-export-no-escaping-log-injection": {
+    "number": 77,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/77",
+    "title": "🟠 HIGH: CEF audit export does not escape pipes, equals, or newlines (log injection / event forging)"
+  },
+  "sec-rate-limiter-unbounded-state-maps-dos": {
+    "number": 78,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/78",
+    "title": "🟠 HIGH: RateLimiter never evicts windowStates/banStates → unbounded memory growth (DoS)"
+  },
+  "sec-sanitize-misses-unicode-control-chars": {
+    "number": 79,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/79",
+    "title": "🟡 MEDIUM: sanitizeControlChars strips only ASCII control chars; zero-width/bidi/Unicode controls survive"
+  },
+  "sec-input-length-counts-code-units-not-bytes": {
+    "number": 80,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/80",
+    "title": "🟡 MEDIUM: Input length limit counts UTF-16 code units, not bytes — multi-byte payloads bypass byte limit"
+  },
+  "sec-injection-custom-patterns-stateful-lastindex": {
+    "number": 81,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/81",
+    "title": "🟡 MEDIUM: Custom injection patterns with /g or /y flags carry lastIndex state across calls (non-deterministic matches)"
+  },
+  "sec-injection-builtin-patterns-narrow-bypassable": {
+    "number": 82,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/82",
+    "title": "🟡 MEDIUM: Built-in injection patterns are narrow and easily bypassed yet used as a primary control"
+  },
+  "sec-audit-logging-fire-and-forget-silent-loss": {
+    "number": 83,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/83",
+    "title": "🟡 MEDIUM: Audit logging is fire-and-forget with a silent default onError → audit events silently lost"
+  },
+  "sec-authz-no-wildcard-hierarchy-and-fail-open": {
+    "number": 84,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/84",
+    "title": "🟢 LOW: AuthorizationMiddleware lacks hierarchical wildcards and fails open when denyByDefault is false"
+  },
+  "sec-rate-limiter-deny-resets-window-and-unban-stale": {
+    "number": 85,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/85",
+    "title": "🟢 LOW: Denied consume persists premature window resets, and unban leaves stale violation state"
+  },
+  "infra-vec-table-dropped-on-dimension-change": {
+    "number": 86,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/86",
+    "title": "🔴 CRITICAL: ensureVecTable drops the vector table (destroying all embeddings) on any dimension change"
+  },
+  "infra-vec-dimension-substring-match": {
+    "number": 87,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/87",
+    "title": "🟠 HIGH: Vector dimension check uses substring includes(), so float[38] matches float[384]"
+  },
+  "infra-memory-writes-not-transactional": {
+    "number": 88,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/88",
+    "title": "🟠 HIGH: Memory store/update write three tables without a transaction, drifting the vector index out of sync"
+  },
+  "infra-multiple-sqlite-connections-same-file": {
+    "number": 89,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/89",
+    "title": "🟠 HIGH: Each repository opens its own better-sqlite3 connection to the same database file"
+  },
+  "core-agent-loop-timeout-throws-in-settimeout": {
+    "number": 90,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/90",
+    "title": "🟠 HIGH: Agent loop timeout throws inside a setTimeout callback (uncaught crash) and never aborts in-flight work"
+  },
+  "core-process-message-mutates-caller-array": {
+    "number": 91,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/91",
+    "title": "🟡 MEDIUM: processMessage mutates the caller's messages array in place"
+  },
+  "core-registered-tools-discard-parameter-schema": {
+    "number": 92,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/92",
+    "title": "🟡 MEDIUM: getRegisteredTools returns empty parameters, discarding real tool schemas"
+  },
+  "infra-sqlite-no-busy-timeout-no-close": {
+    "number": 93,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/93",
+    "title": "🟡 MEDIUM: SQLite connections set no busy_timeout and are never closed on shutdown"
+  },
+  "infra-search-by-embedding-discards-distance": {
+    "number": 94,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/94",
+    "title": "🟢 LOW: searchByEmbedding selects the vector distance but discards it, exposing no relevance score"
+  },
+  "infra-env-secrets-delete-cannot-remove-env-set-non-persistent": {
+    "number": 95,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/95",
+    "title": "🟢 LOW: EnvSecretsAdapter.delete cannot remove env-provided secrets and set is non-persistent"
+  },
+  "core-register-adapter-uses-any": {
+    "number": 96,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/96",
+    "title": "🟢 LOW: registerAdapter types the implementation as any, bypassing the DI cradle type check"
+  },
+  "core-process-pending-tasks-recreates-and-never-runs": {
+    "number": 97,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/97",
+    "title": "🟢 LOW: AgentOrchestrator.processPendingTasks re-creates duplicate tasks and never executes the pending ones"
+  },
+  "mem-run-maintenance-empty-fts-match-crash": {
+    "number": 98,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/98",
+    "title": "🟠 HIGH: runMaintenance fetches all memories via an empty FTS MATCH query, which SQLite rejects"
+  },
+  "mem-graph-find-by-label-substring-merge": {
+    "number": 99,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/99",
+    "title": "🟠 HIGH: findNodesByLabel uses substring matching, merging unrelated nodes during graph extraction"
+  },
+  "mem-graph-context-raw-query-no-match": {
+    "number": 100,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/100",
+    "title": "🟠 HIGH: getGraphContext passes the raw natural-language query to findNodesByLabel, so graph context is effectively never populated"
+  },
+  "mem-graph-transfer-edges-duplicates": {
+    "number": 101,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/101",
+    "title": "🟡 MEDIUM: mergeDuplicates/transferEdges creates duplicate edges with no de-duplication"
+  },
+  "mem-search-not-updating-accessed-at": {
+    "number": 102,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/102",
+    "title": "🟡 MEDIUM: search records access frequency but never updates accessedAt, so recency/decay scoring never reflects reads"
+  },
+  "mem-embedding-cache-fifo-no-dim-validation": {
+    "number": 103,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/103",
+    "title": "🟡 MEDIUM: CachedEmbeddingProvider evicts FIFO (not LRU) and performs no embedding-dimension validation"
+  },
+  "mem-cosine-zero-vector-and-zero-threshold": {
+    "number": 104,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/104",
+    "title": "🟡 MEDIUM: cosineSimilarity returns 0 for zero vectors and the default 0.0 threshold silently drops negative-similarity matches"
+  },
+  "mem-inmemory-stores-unbounded-orphaned-on-compaction": {
+    "number": 105,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/105",
+    "title": "🟡 MEDIUM: In-memory vector and graph stores are unbounded, and compaction leaves orphaned vector entries in the index"
+  },
+  "mem-index-batch-quadratic-indexof": {
+    "number": 106,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/106",
+    "title": "🟢 LOW: indexBatch is O(n^2) due to repeated indexOf lookups"
+  },
+  "mem-pattern-extractor-regex-and-quadratic-relations": {
+    "number": 107,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/107",
+    "title": "🟢 LOW: Pattern entity-extractor regex misses acronyms/non-ASCII and builds O(n^2) all-pairs relations"
+  },
+  "mem-getnode-mutates-accessed-at": {
+    "number": 108,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/108",
+    "title": "🟢 LOW: getNode mutates accessedAt on read, making reads non-idempotent and inconsistent with search"
+  },
+  "intel-recurring-missed-fires-per-poll": {
+    "number": 109,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/109",
+    "title": "🟠 HIGH: Recurring schedules missed during downtime fire once per poll cycle instead of collapsing to the next future occurrence"
+  },
+  "intel-user-utc-offset-ignored": {
+    "number": 110,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/110",
+    "title": "🟠 HIGH: userUtcOffsetMinutes is accepted but never applied; all parsed times are computed in UTC"
+  },
+  "intel-recurrence-dayofweek-dayofmonth-ignored": {
+    "number": 111,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/111",
+    "title": "🟡 MEDIUM: Weekly dayOfWeek and monthly dayOfMonth are ignored when advancing the next occurrence"
+  },
+  "intel-cache-key-generator-unbounded-linear-scan": {
+    "number": 112,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/112",
+    "title": "🟡 MEDIUM: CacheKeyGenerator store is unbounded and performs an O(n) embedding scan on every lookup"
+  },
+  "intel-alert-router-unbounded-history": {
+    "number": 113,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/113",
+    "title": "🟡 MEDIUM: AlertRouter.alertHistory grows without bound"
+  },
+  "intel-anomaly-threshold-upper-bound-only": {
+    "number": 114,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/114",
+    "title": "🟡 MEDIUM: Anomaly alert threshold always reports the upper z-score bound, mislabeling low-side anomalies"
+  },
+  "intel-every-zero-days-non-advancing-refire": {
+    "number": 115,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/115",
+    "title": "🟡 MEDIUM: \"every 0 days\"/\"every 0 weeks\" is accepted and produces a non-advancing schedule that re-fires every poll"
+  },
+  "intel-schedule-parser-confidence-dead-branch": {
+    "number": 116,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/116",
+    "title": "🟢 LOW: ScheduleParser confidence penalty for missing intent is dead code"
+  },
+  "intel-weekday-skips-current-day": {
+    "number": 117,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/117",
+    "title": "🟢 LOW: Bare/\"next\" weekday resolution always skips the current day even when the requested time is still ahead"
+  },
+  "intel-unit-ms-month-year-approximation": {
+    "number": 118,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/118",
+    "title": "🟢 LOW: UNIT_MS approximates month and year as fixed 30/365 days, causing date drift"
+  },
+  "intel-baseline-population-stddev": {
+    "number": 119,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/119",
+    "title": "🟢 LOW: Baseline stdDev uses population variance (÷n) instead of sample variance (÷n−1)"
+  },
+  "intel-cosine-similarity-length-mismatch": {
+    "number": 120,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/120",
+    "title": "🟢 LOW: cosineSimilarity silently ignores trailing dimensions on length mismatch"
+  },
+  "intel-predictive-cache-unbounded-set": {
+    "number": 121,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/121",
+    "title": "🟢 LOW: PredictiveCache.set never bounds the store; only lazy expiry reclaims memory"
+  },
+  "agents-error-classifier-invalid-matches-validation": {
+    "number": 122,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/122",
+    "title": "🟠 HIGH: Error classifier misclassifies auth and data-corruption errors as recoverable validation errors"
+  },
+  "agents-pipeline-step-timeout-uncancellable": {
+    "number": 123,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/123",
+    "title": "🟠 HIGH: Step timeout uses an uncancellable setTimeout, leaking a timer and throwing after the step resolves"
+  },
+  "agents-checkpoint-save-inside-step-try": {
+    "number": 124,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/124",
+    "title": "🟠 HIGH: Checkpoint save inside the step try block misattributes checkpoint failures as step failures and re-runs side effects"
+  },
+  "agents-checkpoint-shallow-copy-corrupts-snapshot": {
+    "number": 125,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/125",
+    "title": "🟠 HIGH: Checkpoint serialise shallow-copies context and output by reference, so later mutations corrupt the snapshot"
+  },
+  "agents-checkpoint-write-only-no-resume": {
+    "number": 126,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/126",
+    "title": "🟡 MEDIUM: Checkpoint subsystem is write-only — load/resume is never implemented or called"
+  },
+  "agents-aggregator-majority-rule-is-at-least-one": {
+    "number": 127,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/127",
+    "title": "🟡 MEDIUM: Result aggregator's documented majority success rule is actually at-least-one-succeeded"
+  },
+  "agents-aggregator-total-duration-sums-parallel": {
+    "number": 128,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/128",
+    "title": "🟡 MEDIUM: Result aggregator totalDurationMs sums per-subtask durations, overstating wall-clock time for parallel runs"
+  },
+  "agents-self-correction-ignores-suggested-max-retries": {
+    "number": 129,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/129",
+    "title": "🟡 MEDIUM: SelfCorrection ignores the classifier's suggestedMaxRetries"
+  },
+  "agents-rate-limit-backoff-leaks-into-later-steps": {
+    "number": 130,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/130",
+    "title": "🟡 MEDIUM: Stale _rateLimitBackoffMs persists in shared context and delays later unrelated correction attempts"
+  },
+  "agents-discovery-findbest-picks-degraded-over-healthy": {
+    "number": 131,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/131",
+    "title": "🟡 MEDIUM: Discovery findBest can rank a degraded agent above a healthy one and diverges from the router's scoring"
+  },
+  "agents-health-checker-no-recovery-threshold-flapping": {
+    "number": 132,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/132",
+    "title": "🟢 LOW: Health checker flips degraded back to healthy on a single successful probe, masking flapping"
+  },
+  "agents-health-checker-interval-self-overlap": {
+    "number": 133,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/133",
+    "title": "🟢 LOW: Health checker setInterval can overlap itself when a check round runs longer than the interval"
+  },
+  "agents-decomposer-unvalidated-required-capability": {
+    "number": 134,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/134",
+    "title": "🟢 LOW: Default decomposition strategy derives requiredCapability from the task name without validation"
+  },
+  "agents-pipeline-paused-skipped-states-never-produced": {
+    "number": 135,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/135",
+    "title": "🟢 LOW: Pipeline paused and step skipped states are defined but never produced"
+  },
+  "agents-registry-stale-snapshot-and-date-type-mismatch": {
+    "number": 136,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/136",
+    "title": "🟢 LOW: Health checker mutates registry from a stale agent snapshot across awaits, and timestamps are Date despite documented ISO-8601 strings"
+  },
+  "integ-event-bus-sync-throw-escapes-allsettled": {
+    "number": 137,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/137",
+    "title": "🟠 HIGH: A synchronously-throwing event handler escapes Promise.allSettled isolation and breaks dispatch"
+  },
+  "integ-circuit-breaker-half-open-no-single-probe-gate": {
+    "number": 138,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/138",
+    "title": "🟠 HIGH: Circuit breaker allows unlimited concurrent probes in HALF_OPEN (no single-probe gate)"
+  },
+  "integ-dlq-overflow-drops-pending-entries": {
+    "number": 139,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/139",
+    "title": "🟠 HIGH: Dead-letter queue drops the oldest still-pending entries on overflow instead of applying backpressure"
+  },
+  "integ-credentials-plaintext-and-mutable-by-reference": {
+    "number": 140,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/140",
+    "title": "🟡 MEDIUM: Credentials are stored in plaintext and returned by reference, allowing external mutation"
+  },
+  "integ-dlq-never-removes-exhausted-entries": {
+    "number": 141,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/141",
+    "title": "🟡 MEDIUM: Dead-letter queue never removes permanently-failed entries, causing unbounded retention"
+  },
+  "integ-http-adapter-forwards-authorization-across-redirects": {
+    "number": 142,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/142",
+    "title": "🟡 MEDIUM: HTTP adapter follows redirects while forwarding the Authorization header to the redirect target"
+  },
+  "integ-event-store-compact-assumes-sorted": {
+    "number": 143,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/143",
+    "title": "🟡 MEDIUM: EventStore.compact assumes events are already sorted by time and stops at the first recent event"
+  },
+  "integ-credential-manager-seeds-empty-env-as-present": {
+    "number": 144,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/144",
+    "title": "🟡 MEDIUM: Credential manager seeds empty-string env credentials as if present, masking missing-credential errors"
+  },
+  "integ-circuit-breaker-getters-mutate-state": {
+    "number": 145,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/145",
+    "title": "🟢 LOW: Circuit breaker getters mutate state (side effects in property accessors)"
+  },
+  "integ-dlq-replay-swallows-error": {
+    "number": 146,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/146",
+    "title": "🟢 LOW: Dead-letter queue replay swallows the underlying error, returning only a boolean"
+  },
+  "integ-circuit-breaker-half-open-full-retry-loop": {
+    "number": 147,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/147",
+    "title": "🟢 LOW: On a HALF_OPEN trial, CircuitBreaker.call runs the full retry loop instead of a single probe"
+  },
+  "integ-event-store-import-allows-intra-batch-duplicate-ids": {
+    "number": 148,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/148",
+    "title": "🟢 LOW: EventStore.import allows duplicate ids within the imported batch (stale dedup snapshot)"
+  },
+  "net-handshake-nonce-no-replay-protection": {
+    "number": 149,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/149",
+    "title": "🔴 CRITICAL: Handshake nonce is non-random and never tracked, providing no replay protection"
+  },
+  "net-handshake-no-peer-authentication": {
+    "number": 150,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/150",
+    "title": "🔴 CRITICAL: Handshake never verifies senderPublicKey/trustProof — any peer is trusted"
+  },
+  "net-router-no-max-ttl-clamp-no-loop-detection": {
+    "number": 151,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/151",
+    "title": "🟠 HIGH: Message router does not clamp TTL to MAX_TTL and performs no loop detection"
+  },
+  "net-router-skips-header-validation": {
+    "number": 152,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/152",
+    "title": "🟠 HIGH: Message router routes messages without calling validateHeaders"
+  },
+  "learn-prompt-tracker-unbounded-outcome-records": {
+    "number": 153,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/153",
+    "title": "🟠 HIGH: PromptTracker.outcomeRecords grows without bound (no eviction cap)"
+  },
+  "learn-prompt-tracker-outcome-lost-on-usage-eviction": {
+    "number": 154,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/154",
+    "title": "🟡 MEDIUM: recordOutcome throws and loses the outcome when its usage record was FIFO-evicted"
+  },
+  "net-context-merge-no-conversation-dedup": {
+    "number": 155,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/155",
+    "title": "🟡 MEDIUM: ContextSerializer.merge does not dedupe conversation history, duplicating messages on re-merge"
+  },
+  "net-context-deserialize-no-schema-validation": {
+    "number": 156,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/156",
+    "title": "🟡 MEDIUM: ContextSerializer deserializes untrusted snapshots without schema validation"
+  },
+  "learn-optimizer-auto-promotes-on-unverified-scores": {
+    "number": 157,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/157",
+    "title": "🟡 MEDIUM: Prompt optimizer auto-promotes variants from unauthenticated outcome scores (score poisoning)"
+  },
+  "ui-dashboard-streamer-buffer-map-unbounded": {
+    "number": 158,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/158",
+    "title": "🟡 MEDIUM: DashboardStreamer retains per-dashboard buffers forever (Map never pruned on unsubscribe)"
+  },
+  "ui-data-analyzer-numeric-threshold-on-dates": {
+    "number": 159,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/159",
+    "title": "🟡 MEDIUM: DataAnalyzer applies the numeric threshold to date columns, misclassifying them"
+  },
+  "learn-prompt-composer-no-interpolation-sanitization": {
+    "number": 160,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/160",
+    "title": "🟡 MEDIUM: PromptComposer.interpolate injects context values verbatim (prompt injection via template values)"
+  },
+  "ui-auto-widgets-non-exhaustive-switch": {
+    "number": 161,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/161",
+    "title": "🟢 LOW: AutoWidgets.buildSpec switch has no default and silently returns undefined for unknown kinds"
+  },
+  "net-handshake-confirm-skips-semver-compat-check": {
+    "number": 162,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/162",
+    "title": "🟢 LOW: handleConfirm uses raw string equality instead of the protocol compatibility check"
+  },
+  "net-predictable-message-and-session-ids": {
+    "number": 163,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/163",
+    "title": "🟢 LOW: Message, correlation, and session IDs use Date.now()+Math.random(), not a cryptographic source"
+  },
+  "web-sessions-search-stale-async-race": {
+    "number": 164,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/164",
+    "title": "🟡 MEDIUM: Sessions list search/filter has a stale-response race that can overwrite newer results"
+  },
+  "web-eventsource-missing-withcredentials-cross-origin": {
+    "number": 165,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/165",
+    "title": "🟢 LOW: SSE EventSource connections omit withCredentials, dropping auth when served cross-origin"
+  },
+  "web-providerstep-stale-closure-in-effects": {
+    "number": 166,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/166",
+    "title": "🟡 MEDIUM: ProviderStep effects capture a stale `data` prop, dropping concurrent field edits"
+  },
+  "web-react-router-open-redirect-advisory-version": {
+    "number": 167,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/167",
+    "title": "🟢 LOW: react-router 6.30.3 is within the open-redirect advisory range (GHSA-2j2x-hqr9-3h42)"
+  },
+  "web-auth-token-in-url-query-string": {
+    "number": 168,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/168",
+    "title": "🟡 MEDIUM: Auth token is passed in the URL query string during the setup→dashboard handoff"
+  },
+  "web-fetch-omits-csrf-token-header": {
+    "number": 169,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/169",
+    "title": "🟢 LOW: fetchAPI sends cookies but never attaches the CSRF token the server expects"
+  },
+  "web-hooks-delete-no-confirmation": {
+    "number": 170,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/170",
+    "title": "🟢 LOW: Trigger and rule deletions fire immediately with no confirmation prompt"
+  },
+  "web-useconfigstate-implicit-model-autosave": {
+    "number": 171,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/171",
+    "title": "🟢 LOW: useConfigState auto-persists the model to the server on provider change without explicit save"
+  },
+  "web-errorboundary-no-error-reporting": {
+    "number": 172,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/172",
+    "title": "🟢 LOW: ErrorBoundary renders a fallback but never logs or reports the caught error"
+  },
+  "web-dashboardgrid-unvalidated-localstorage-shape": {
+    "number": 173,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/173",
+    "title": "🟢 LOW: DashboardGrid trusts localStorage layout shape without schema validation"
+  },
+  "web-setup-weak-apihash-validation": {
+    "number": 174,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/174",
+    "title": "🟢 LOW: Setup wizard accepts malformed Telegram api_hash (length-only check)"
+  },
+  "web-analytics-budget-silent-invalid-coercion": {
+    "number": 175,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/175",
+    "title": "🟢 LOW: Budget save silently coerces invalid/partial input to null instead of rejecting it"
+  },
+  "web-config-import-no-payload-schema-guard": {
+    "number": 176,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/176",
+    "title": "🟢 LOW: Config import validates only the version tag, not the imported payload shape"
+  },
+  "v1-money-tools-dm-only-not-admin-gated": {
+    "number": 177,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/177",
+    "title": "🔴 CRITICAL: TON/jetton transfer tools are gated only by scope \"dm-only\", so any DM user can drive real transfers"
+  },
+  "v1-deal-strategy-checks-valueton-but-transfers-tonamount": {
+    "number": 178,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/178",
+    "title": "🟠 HIGH: Deal strategy compliance is checked on valueTon while verification/transfer use tonAmount (decoupled fields)"
+  },
+  "v1-exec-allowlist-scope-collapses-to-admin-only-unenforced": {
+    "number": 179,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/179",
+    "title": "🟠 HIGH: Exec scope \"allowlist\" silently maps to admin-only and the configured user allowlist is never enforced"
+  },
+  "v1-management-api-binds-all-interfaces-allowall-ips-mnemonic-endpoint": {
+    "number": 180,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/180",
+    "title": "🟠 HIGH: Management API binds all interfaces with an allow-all IP default and exposes /wallet/generate returning a mnemonic"
+  },
+  "v1-workspace-validator-no-realpath-symlink-escape": {
+    "number": 181,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/181",
+    "title": "🟡 MEDIUM: Workspace path validator does not resolve symlinks before the containment check (symlink escape)"
+  },
+  "v1-ton-send-tool-cannot-set-bounce-defaults-bounceable": {
+    "number": 182,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/182",
+    "title": "🟡 MEDIUM: ton_send tool has no bounce parameter and never passes it, so transfers default to bounceable"
+  },
+  "v1-sendton-fabricates-pseudo-tx-hash": {
+    "number": 183,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/183",
+    "title": "🟡 MEDIUM: sendTon fabricates a pseudo transaction hash instead of the real on-chain hash, corrupting deal records"
+  },
+  "v1-exec-install-service-shell-command-injection": {
+    "number": 184,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/184",
+    "title": "🟡 MEDIUM: exec_install and exec_service build bash -c strings from unsanitized input (command injection)"
+  },
+  "v1-webui-auth-token-via-query-string": {
+    "number": 185,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/185",
+    "title": "🟢 LOW: WebUI accepts the auth token via ?token= query string (leaks via logs and browser history)"
+  },
+  "v1-teleton-data-dir-created-without-restrictive-mode": {
+    "number": 186,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/186",
+    "title": "🟢 LOW: ~/.teleton data directory is created without a restrictive (0700) mode"
+  },
+  "ci-workflow-run-interpolation-into-run-step": {
+    "number": 187,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/187",
+    "title": "🟠 HIGH: telegram-notify.yml interpolates workflow_run context directly into a run: shell step"
+  },
+  "ci-telegram-action-pinned-to-master": {
+    "number": 188,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/188",
+    "title": "🟠 HIGH: telegram-action third-party action pinned to mutable @master ref instead of a SHA"
+  },
+  "ci-workflows-missing-top-level-permissions": {
+    "number": 189,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/189",
+    "title": "🟠 HIGH: CI, deploy-vercel, and telegram-notify workflows declare no permissions: (broad default GITHUB_TOKEN)"
+  },
+  "ci-core-dep-is-github-fork-of-gramjs": {
+    "number": 190,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/190",
+    "title": "🟠 HIGH: Core runtime dependency telegram resolves to a GitHub fork of gramjs, not the published package"
+  },
+  "ci-dockerfile-runs-lifecycle-scripts-on-install": {
+    "number": 191,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/191",
+    "title": "🟠 HIGH: Dockerfile runs dependency lifecycle scripts during npm ci (no --ignore-scripts)"
+  },
+  "ci-install-sh-curl-bash-no-verification": {
+    "number": 192,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/192",
+    "title": "🟡 MEDIUM: install.sh is delivered via curl | bash with no checksum or signature verification"
+  },
+  "ci-install-sh-suggests-sudo-global-npm": {
+    "number": 193,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/193",
+    "title": "🟡 MEDIUM: install.sh suggests sudo npm install -g, running a network install as root"
+  },
+  "ci-release-publishes-mutable-latest-tag": {
+    "number": 194,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/194",
+    "title": "🟡 MEDIUM: Release workflow publishes a mutable :latest Docker tag with no immutable digest reference"
+  },
+  "ci-actions-pinned-to-tags-not-shas": {
+    "number": 195,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/195",
+    "title": "🟡 MEDIUM: First-party GitHub Actions are pinned to mutable major tags rather than commit SHAs"
+  },
+  "ci-no-dependabot-and-no-codeowners": {
+    "number": 196,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/196",
+    "title": "🟡 MEDIUM: Repository has no Dependabot configuration and no CODEOWNERS file"
+  },
+  "ci-audit-ci-allowlist-suppresses-advisories": {
+    "number": 197,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/197",
+    "title": "🟡 MEDIUM: audit-ci.jsonc allowlists 16 advisories, suppressing known vulnerabilities in CI"
+  },
+  "ci-rvc-dockerfile-root-floating-base-no-healthcheck": {
+    "number": 198,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/198",
+    "title": "🟢 LOW: docker/rvc image runs as root, uses a floating base tag, and has no HEALTHCHECK"
+  },
+  "ci-pr-template-wrong-branch-and-security-md-wrong-url": {
+    "number": 199,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/199",
+    "title": "🟢 LOW: PR template instructs targeting a nonexistent dev branch; SECURITY.md points to the wrong repo URL"
+  },
+  "ci-dockerignore-missing-pem-key-exclusions": {
+    "number": 200,
+    "url": "https://github.com/xlabtg/teleton-agent-v2/issues/200",
+    "title": "🟢 LOW: .dockerignore does not exclude *.pem / *.key, risking secret leakage into build context"
+  }
+}
