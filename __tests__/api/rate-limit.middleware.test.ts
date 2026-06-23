@@ -91,10 +91,36 @@ describe("createRateLimitMiddleware", () => {
     try {
       const localApp = buildApp(TEST_CONFIG);
       for (let i = 0; i < TEST_CONFIG.rateLimitMax; i++) {
-        await localApp.request("/ping", { headers: { "x-forwarded-for": "8.8.8.8" } });
+        await localApp.request("/ping", {
+          headers: { "x-real-ip": "127.0.0.1", "x-forwarded-for": "8.8.8.8" },
+        });
       }
       const res = await localApp.request("/ping", {
-        headers: { "x-forwarded-for": "8.8.8.8" },
+        headers: { "x-real-ip": "127.0.0.1", "x-forwarded-for": "8.8.8.8" },
+      });
+      expect(res.status).toBe(429);
+    } finally {
+      if (original === undefined) {
+        delete process.env["TRUSTED_PROXIES"];
+      } else {
+        process.env["TRUSTED_PROXIES"] = original;
+      }
+    }
+  });
+
+  it("ignores x-forwarded-for when the peer is not a trusted proxy", async () => {
+    const original = process.env["TRUSTED_PROXIES"];
+    process.env["TRUSTED_PROXIES"] = "127.0.0.1";
+    try {
+      const localApp = buildApp(TEST_CONFIG);
+      for (let i = 0; i < TEST_CONFIG.rateLimitMax; i++) {
+        const res = await localApp.request("/ping", {
+          headers: { "x-real-ip": "10.0.0.10", "x-forwarded-for": `8.8.8.${i}` },
+        });
+        expect(res.status).toBe(200);
+      }
+      const res = await localApp.request("/ping", {
+        headers: { "x-real-ip": "10.0.0.10", "x-forwarded-for": "8.8.8.99" },
       });
       expect(res.status).toBe(429);
     } finally {
