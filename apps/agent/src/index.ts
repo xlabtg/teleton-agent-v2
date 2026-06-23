@@ -5,6 +5,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { createAppContainer, type AppConfig } from "@teleton/core/ports/di.container.js";
 import { AgentRuntime } from "@teleton/core/usecases/agent-runtime.js";
@@ -157,9 +158,15 @@ export class TeletonApp {
   }
 }
 
-// Direct execution
-const app = new TeletonApp();
-app.start().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+function isDirectExecution(): boolean {
+  const entrypoint = process.argv[1];
+  return Boolean(entrypoint && import.meta.url === pathToFileURL(entrypoint).href);
+}
+
+if (isDirectExecution()) {
+  const app = new TeletonApp();
+  app.start().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}
