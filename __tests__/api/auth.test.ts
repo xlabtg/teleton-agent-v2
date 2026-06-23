@@ -6,7 +6,10 @@
 import { describe, it, expect } from "vitest";
 import * as jose from "jose";
 import { createAuthRoutes } from "../../packages/api/src/routes/auth.js";
-import { createAuthMiddleware } from "../../packages/api/src/middleware/auth.middleware.js";
+import {
+  createAuthMiddleware,
+  type UserRole,
+} from "../../packages/api/src/middleware/auth.middleware.js";
 import { createAgentRoutes } from "../../packages/api/src/routes/agents.js";
 import { createHealthRoutes } from "../../packages/api/src/routes/health.js";
 import { errorHandler } from "../../packages/api/src/middleware/error-handler.js";
@@ -26,7 +29,17 @@ function buildTestApp() {
   app.route("/", createHealthRoutes());
   app.route("/api/auth", createAuthRoutes(TEST_AUTH_CONFIG));
   app.route("/api/agents", createAgentRoutes());
+  app.get("/api/unmapped", (ctx) => ctx.json({ ok: true }));
   return app;
+}
+
+async function createTestToken(role: UserRole, sub = `${role}-user`): Promise<string> {
+  const jwtSecret = new TextEncoder().encode(TEST_AUTH_CONFIG.jwtSecret);
+  const now = Math.floor(Date.now() / 1000);
+  return new jose.SignJWT({ sub, role, iat: now })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(now + TEST_AUTH_CONFIG.tokenExpiry)
+    .sign(jwtSecret);
 }
 
 describe("Auth Routes", () => {
@@ -263,6 +276,33 @@ describe("Auth Routes", () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(res.status).toBe(200);
+    });
+
+    it.each(["readonly", "plugin"] as const)(
+      "should return 403 for GET /api/agents with %s token",
+      async (role) => {
+        const token = await createTestToken(role);
+
+        const res = await app.request("/api/agents", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as Record<string, Record<string, unknown>>;
+        expect(body.error.code).toBe("FORBIDDEN");
+      }
+    );
+
+    it("should return 403 for an API route with no explicit RBAC rule", async () => {
+      const token = await createTestToken("admin");
+
+      const res = await app.request("/api/unmapped", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as Record<string, Record<string, unknown>>;
+      expect(body.error.code).toBe("FORBIDDEN");
     });
 
     it("should allow GET /health without token", async () => {
