@@ -36,6 +36,27 @@ const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/api/health": ["admin", "user", "plugin", "readonly"],
 };
 
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function compileRoutePattern(pattern: string): RegExp {
+  if (pattern.endsWith("/*")) {
+    const prefix = pattern.slice(0, -2);
+    return new RegExp(`^${escapeRegexLiteral(prefix)}(?:/.*)?$`);
+  }
+
+  const regexPattern = escapeRegexLiteral(pattern).replace(/\\\*/g, ".*");
+  return new RegExp(`^${regexPattern}$`);
+}
+
+const ROUTE_PERMISSION_MATCHERS = Object.entries(ROUTE_PERMISSIONS).map(
+  ([pattern, allowedRoles]) => ({
+    regex: compileRoutePattern(pattern),
+    allowedRoles,
+  })
+);
+
 /**
  * Verifies a JWT token's signature and returns its payload.
  * Uses jose to cryptographically verify the HMAC-SHA256 signature.
@@ -56,13 +77,12 @@ async function decodeToken(token: string, secret: string): Promise<TokenPayload>
 }
 
 function hasPermission(role: UserRole, path: string): boolean {
-  for (const [pattern, allowedRoles] of Object.entries(ROUTE_PERMISSIONS)) {
-    const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
-    if (regex.test(path) && !allowedRoles.includes(role)) {
-      return false;
+  for (const { regex, allowedRoles } of ROUTE_PERMISSION_MATCHERS) {
+    if (regex.test(path)) {
+      return allowedRoles.includes(role);
     }
   }
-  return true;
+  return false;
 }
 
 export function createAuthMiddleware(config: AuthConfig) {
