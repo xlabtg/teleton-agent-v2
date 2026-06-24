@@ -51,9 +51,6 @@ export class TelegramUserClient {
   private config: TelegramClientConfig;
   private connected = false;
   private me?: TelegramUser;
-  /** Index into mtprotoProxies[] currently being used (or undefined = direct) */
-  private activeProxyIndex?: number;
-
   constructor(config: TelegramClientConfig) {
     this.config = config;
     this.client = this.buildClient();
@@ -121,7 +118,6 @@ export class TelegramUserClient {
       `[MTProxy] Trying proxy ${index + 1}/${proxies.length}`
     );
     this.client = this.buildClient(proxy);
-    this.activeProxyIndex = index;
     await this.client.connect();
   }
 
@@ -240,7 +236,6 @@ export class TelegramUserClient {
         if (!proxyConnected) {
           log.warn("[MTProxy] All proxies failed, trying direct connection");
           this.client = this.buildClient();
-          this.activeProxyIndex = undefined;
           await this.client.connect();
         }
         // If no session exists, run auth flow now that the TCP connection is established
