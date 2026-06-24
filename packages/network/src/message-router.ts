@@ -9,7 +9,7 @@
  */
 
 import { type AgentMessage, type RouteHop, createProtocolErrorMessage } from "./message-schema.js";
-import { ProtocolErrorCode, DEFAULT_NAMESPACE } from "./protocol.js";
+import { ProtocolErrorCode, DEFAULT_NAMESPACE, MAX_TTL } from "./protocol.js";
 
 // ─── Transport abstraction ────────────────────────────────────────────────────
 
@@ -178,6 +178,22 @@ export class MessageRouter {
         "dropped_ttl",
         ProtocolErrorCode.TTL_EXPIRED,
         "Message TTL expired"
+      );
+    }
+    if (message.routing.ttl > MAX_TTL) {
+      return this.fail(
+        message,
+        "dropped_ttl",
+        ProtocolErrorCode.TTL_EXPIRED,
+        `Message TTL ${message.routing.ttl} exceeds maximum ${MAX_TTL}`
+      );
+    }
+    if (message.routing.path.some((hop) => hop.agentId === this.agentId)) {
+      return this.fail(
+        message,
+        "dropped_ttl",
+        ProtocolErrorCode.TTL_EXPIRED,
+        `Routing loop detected at "${this.agentId}"`
       );
     }
 
