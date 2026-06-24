@@ -8,12 +8,24 @@ import { createAuthMiddleware } from "../../packages/api/src/middleware/auth.mid
 import { createAuthRoutes } from "../../packages/api/src/routes/auth.js";
 import { createHealthRoutes } from "../../packages/api/src/routes/health.js";
 import { errorHandler } from "../../packages/api/src/middleware/error-handler.js";
+import { createServer, type ServerConfig } from "../../packages/api/src/server.js";
 import { Hono } from "hono";
 
 const TEST_AUTH_CONFIG = {
   jwtSecret: "test-secret-key",
   tokenExpiry: 3600,
   refreshTokenExpiry: 604800,
+};
+
+const TEST_SERVER_CONFIG: ServerConfig = {
+  port: 0,
+  host: "127.0.0.1",
+  auth: TEST_AUTH_CONFIG,
+  security: {
+    rateLimitWindow: 60_000,
+    rateLimitMax: 100,
+    corsOrigins: [],
+  },
 };
 
 /** Build a minimal app with auth middleware + docs route to test public accessibility */
@@ -37,6 +49,18 @@ describe("Docs Routes", () => {
       const text = await res.text();
       expect(text).toContain("<!DOCTYPE html>");
       expect(text).toContain("swagger-ui");
+      expect(text).toContain("/api/docs/swagger-init.js");
+    });
+  });
+
+  describe("GET /swagger-init.js", () => {
+    it("should return a same-origin Swagger UI bootstrap script", async () => {
+      const res = await router.request("/swagger-init.js");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("application/javascript");
+
+      const text = await res.text();
+      expect(text).toContain("SwaggerUIBundle({");
       expect(text).toContain("/api/docs/openapi.json");
     });
   });
@@ -78,6 +102,35 @@ describe("Docs Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.openapi).toBe("3.0.3");
+    });
+  });
+
+  describe("Security headers integration — Swagger assets are permitted", () => {
+    const app = createServer(TEST_SERVER_CONFIG);
+
+    it("should allow the docs page Swagger assets without inline script execution", async () => {
+      const res = await app.request("/api/docs");
+
+      expect(res.status).toBe(200);
+      const csp = res.headers.get("Content-Security-Policy");
+      expect(csp).toContain("default-src 'self'");
+      expect(csp).toContain("script-src 'self' https://unpkg.com");
+      expect(csp).toContain("style-src 'self' https://unpkg.com");
+      expect(csp).not.toContain("'unsafe-inline'");
+
+      const text = await res.text();
+      expect(text).toContain("https://unpkg.com/swagger-ui-dist@5/swagger-ui.css");
+      expect(text).toContain("https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js");
+      expect(text).toContain('src="/api/docs/swagger-init.js"');
+      expect(text).not.toMatch(/<script>\s*SwaggerUIBundle/);
+    });
+
+    it("should keep the default strict CSP outside the docs route", async () => {
+      const res = await app.request("/");
+
+      expect(res.headers.get("Content-Security-Policy")).toBe(
+        "default-src 'self'; script-src 'self'"
+      );
     });
   });
 });

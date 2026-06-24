@@ -60,6 +60,7 @@ describe("HSTS header", () => {
 
     const headers: Record<string, string> = {};
     const ctx = {
+      req: { path: "/" },
       header: (name: string, value: string) => {
         headers[name.toLowerCase()] = value;
       },
