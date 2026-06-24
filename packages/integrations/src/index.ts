@@ -47,5 +47,8 @@ export { DeadLetterQueue } from "./dead-letter-queue.js";
 export type {
   DeadLetterEntry,
   DlqReplayHandler,
+  DlqReplayResult,
+  DlqReplayFailure,
+  DlqRetryAllResult,
   DeadLetterQueueConfig,
 } from "./dead-letter-queue.js";
