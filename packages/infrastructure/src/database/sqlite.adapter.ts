@@ -240,7 +240,7 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
       )
       .all(serializeEmbedding(embedding), limit) as Record<string, unknown>[];
 
-    return rows.map((r) => this.rowToEntry(r));
+    return rows.map((r) => this.rowToEntry(r, { includeVectorScore: true }));
   }
 
   async update(id: string, updates: Partial<MemoryEntry>): Promise<MemoryEntry> {
@@ -319,7 +319,14 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
     return result.changes;
   }
 
-  private rowToEntry(row: Record<string, unknown>): MemoryEntry {
+  private rowToEntry(
+    row: Record<string, unknown>,
+    options: { includeVectorScore?: boolean } = {}
+  ): MemoryEntry {
+    const distance = typeof row.distance === "number" ? row.distance : undefined;
+    const vectorScore =
+      options.includeVectorScore && distance !== undefined ? 1 - distance : undefined;
+
     return {
       id: row.id as string,
       content: row.content as string,
@@ -327,6 +334,7 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
       createdAt: new Date(row.created_at as string),
       accessedAt: new Date(row.accessed_at as string),
       tags: JSON.parse((row.tags as string) || "[]") as string[],
+      ...(vectorScore !== undefined ? { score: vectorScore, vectorScore } : {}),
     };
   }
 }

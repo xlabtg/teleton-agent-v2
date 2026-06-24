@@ -113,9 +113,13 @@ describe("SQLiteMemoryRepository", () => {
     expect(results.length).toBeGreaterThanOrEqual(1);
     // The first result should be the closest entry
     expect(results[0].id).toBe(e1.id);
+    expect(results[0].score).toBeCloseTo(1);
+    expect(results[0].vectorScore).toBe(results[0].score);
     // The far entry should come after
     if (results.length > 1) {
       expect(results[1].id).toBe(e2.id);
+      expect(results[1].score).toBeLessThan(results[0].score!);
+      expect(results[1].vectorScore).toBe(results[1].score);
     }
   });
 
