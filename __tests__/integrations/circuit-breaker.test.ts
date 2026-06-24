@@ -48,7 +48,7 @@ describe("CircuitBreaker", () => {
   });
 
   describe("HALF_OPEN state", () => {
-    it("should transition to HALF_OPEN after recovery timeout", async () => {
+    it("should report HALF_OPEN after recovery timeout", async () => {
       const now = Date.now();
       vi.useFakeTimers();
       vi.setSystemTime(now);
@@ -67,6 +67,38 @@ describe("CircuitBreaker", () => {
       vi.setSystemTime(now + 1_001);
       expect(cb.currentState).toBe("HALF_OPEN");
       vi.useRealTimers();
+    });
+
+    it("should not persist a HALF_OPEN transition when accessors are read", async () => {
+      const now = Date.now();
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const cb = new CircuitBreaker({
+        failureThreshold: 1,
+        maxRetries: 0,
+        recoveryTimeoutMs: 1_000,
+        retryBaseDelayMs: 0,
+      });
+      const internals = cb as unknown as { state: "CLOSED" | "OPEN" | "HALF_OPEN" };
+
+      try {
+        await expect(
+          cb.call(async () => {
+            throw new Error("x");
+          })
+        ).rejects.toThrow();
+        expect(internals.state).toBe("OPEN");
+
+        vi.setSystemTime(now + 1_001);
+        expect(cb.currentState).toBe("HALF_OPEN");
+        expect(cb.stats.state).toBe("HALF_OPEN");
+        expect(internals.state).toBe("OPEN");
+
+        await expect(cb.call(async () => "ok")).resolves.toBe("ok");
+        expect(internals.state).toBe("HALF_OPEN");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should close after enough successes in HALF_OPEN", async () => {

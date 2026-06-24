@@ -94,15 +94,13 @@ export class CircuitBreaker {
 
   /** Current circuit state. */
   get currentState(): CircuitState {
-    this._maybeTransitionToHalfOpen();
-    return this.state;
+    return this._effectiveState();
   }
 
   /** Snapshot of breaker statistics. */
   get stats(): CircuitBreakerStats {
-    this._maybeTransitionToHalfOpen();
     return {
-      state: this.state,
+      state: this._effectiveState(),
       failureCount: this.failureCount,
       successCount: this.halfOpenSuccessCount,
       lastFailureAt: this.lastFailureAt?.toISOString() ?? null,
@@ -190,14 +188,21 @@ export class CircuitBreaker {
   }
 
   private _maybeTransitionToHalfOpen(): void {
-    if (
-      this.state === "OPEN" &&
-      this.openedAt !== null &&
-      Date.now() - this.openedAt.getTime() >= this.recoveryTimeoutMs
-    ) {
+    if (this.state === "OPEN" && this._effectiveState() === "HALF_OPEN") {
       this.state = "HALF_OPEN";
       this.halfOpenSuccessCount = 0;
     }
+  }
+
+  private _effectiveState(now = Date.now()): CircuitState {
+    if (
+      this.state === "OPEN" &&
+      this.openedAt !== null &&
+      now - this.openedAt.getTime() >= this.recoveryTimeoutMs
+    ) {
+      return "HALF_OPEN";
+    }
+    return this.state;
   }
 }
 
