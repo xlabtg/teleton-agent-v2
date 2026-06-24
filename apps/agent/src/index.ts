@@ -12,6 +12,7 @@ import { createAppContainer, type AppConfig } from "@teleton/core/ports/di.conta
 import { AgentRuntime } from "@teleton/core/usecases/agent-runtime.js";
 import { AgentOrchestrator } from "@teleton/core/usecases/agent-orchestrator.js";
 import {
+  SQLiteConnection,
   SQLiteMemoryRepository,
   SQLiteTaskRepository,
 } from "@teleton/infrastructure/database/sqlite.adapter.js";
@@ -108,12 +109,12 @@ export class TeletonApp {
 
     // 3. Initialize infrastructure
     const eventBus = new InMemoryEventBus();
-    const memoryRepo = new SQLiteMemoryRepository(config.database.path);
-    const taskRepo = new SQLiteTaskRepository(config.database.path);
+    const sqliteConnection = new SQLiteConnection(config.database.path);
+    const memoryRepo = new SQLiteMemoryRepository(sqliteConnection);
+    const taskRepo = new SQLiteTaskRepository(sqliteConnection);
     const resources: CloseableResource[] = [
       { name: "event bus", close: () => eventBus.close() },
-      { name: "memory repository", close: () => memoryRepo.close() },
-      { name: "task repository", close: () => taskRepo.close() },
+      { name: "SQLite connection", close: () => sqliteConnection.close() },
     ];
     console.log("✅ Infrastructure initialized");
 
