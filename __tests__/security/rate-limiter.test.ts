@@ -84,6 +84,58 @@ describe("RateLimiter", () => {
     expect(rl.consume("user").allowed).toBe(true);
   });
 
+  it("evicts idle window state after all windows expire", () => {
+    const now = Date.now();
+    const rl = new RateLimiter({ windows: [{ windowMs: 100, maxRequests: 1 }] });
+
+    for (let i = 0; i < 100; i++) {
+      rl.consume(`user-${i}`, now);
+    }
+    expect(rl.getWindowStateSize()).toBe(100);
+
+    rl.sweep(now + 101);
+    expect(rl.getWindowStateSize()).toBe(0);
+  });
+
+  it("evicts ban state after bans and abuse windows expire", () => {
+    const now = Date.now();
+    const rl = new RateLimiter({
+      windows: [{ windowMs: 10_000, maxRequests: 1 }],
+      abuseThreshold: 1,
+      abuseWindowMs: 100,
+      banDurationMs: 100,
+    });
+
+    for (let i = 0; i < 100; i++) {
+      rl.consume(`bad-${i}`, now);
+      rl.consume(`bad-${i}`, now);
+    }
+    expect(rl.getBanStateSize()).toBe(100);
+
+    rl.sweep(now + 101);
+    expect(rl.getBanStateSize()).toBe(0);
+  });
+
+  it("bounds retained state by maxKeys", () => {
+    const now = Date.now();
+    const rl = new RateLimiter({
+      windows: [{ windowMs: 60_000, maxRequests: 1 }],
+      abuseThreshold: 1,
+      maxKeys: 10,
+    });
+
+    for (let i = 0; i < 50; i++) {
+      rl.consume(`user-${i}`, now + i);
+    }
+    expect(rl.getWindowStateSize()).toBeLessThanOrEqual(10);
+
+    for (let i = 0; i < 50; i++) {
+      rl.consume(`bad-${i}`, now + 100 + i);
+      rl.consume(`bad-${i}`, now + 100 + i);
+    }
+    expect(rl.getBanStateSize()).toBeLessThanOrEqual(10);
+  });
+
   it("respects multiple windows simultaneously", () => {
     const now = Date.now();
     const rl = new RateLimiter({
