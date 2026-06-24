@@ -4,6 +4,7 @@
  */
 
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createAdaptorServer } from "@hono/node-server";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
@@ -16,6 +17,7 @@ import {
   createRateLimitMiddleware,
   createBodySizeLimitMiddleware,
   createAuthRateLimitMiddleware,
+  createCorsConfig,
   securityHeadersMiddleware,
   requestIdMiddleware,
   type SecurityConfig,
@@ -131,6 +133,7 @@ export function createServer(config: ServerConfig): Hono {
   // Global middleware
   app.use("*", requestIdMiddleware());
   app.use("*", securityHeadersMiddleware());
+  app.use("*", cors(createCorsConfig(config.security.corsOrigins)));
   app.use("*", createBodySizeLimitMiddleware(config.security));
   app.use("*", createRateLimitMiddleware(config.security));
   // Apply stricter rate limiting to auth endpoints before the auth middleware

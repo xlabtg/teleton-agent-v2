@@ -5,7 +5,23 @@
  */
 import { describe, it, expect } from "vitest";
 import { createCorsConfig } from "../../packages/api/src/middleware/security.middleware.js";
+import { createServer, type ServerConfig } from "../../packages/api/src/server.js";
 import { apiConfigSchema } from "../../configs/config.schema.js";
+
+const TEST_SERVER_CONFIG: ServerConfig = {
+  port: 0,
+  host: "127.0.0.1",
+  auth: {
+    jwtSecret: "test-secret-key",
+    tokenExpiry: 3600,
+    refreshTokenExpiry: 604800,
+  },
+  security: {
+    rateLimitWindow: 60_000,
+    rateLimitMax: 100,
+    corsOrigins: ["http://localhost:5173"],
+  },
+};
 
 describe("createCorsConfig", () => {
   it("should return a valid config for explicit origins", () => {
@@ -85,5 +101,45 @@ describe("apiConfigSchema CORS validation", () => {
     if (result.success) {
       expect(result.data.cors).toEqual(["http://localhost:5173"]);
     }
+  });
+});
+
+describe("createServer CORS middleware", () => {
+  it("should reflect an allowed Origin header", async () => {
+    const app = createServer(TEST_SERVER_CONFIG);
+
+    const res = await app.request("/", {
+      headers: { Origin: "http://localhost:5173" },
+    });
+
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:5173");
+    expect(res.headers.get("Access-Control-Expose-Headers")).toContain("X-Request-Id");
+  });
+
+  it("should not emit Access-Control-Allow-Origin for a disallowed Origin header", async () => {
+    const app = createServer(TEST_SERVER_CONFIG);
+
+    const res = await app.request("/", {
+      headers: { Origin: "https://attacker.example" },
+    });
+
+    expect(res.headers.has("Access-Control-Allow-Origin")).toBe(false);
+  });
+
+  it("should handle protected route preflight requests before auth middleware", async () => {
+    const app = createServer(TEST_SERVER_CONFIG);
+
+    const res = await app.request("/api/agents", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:5173",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "Authorization",
+      },
+    });
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:5173");
+    expect(res.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
   });
 });
