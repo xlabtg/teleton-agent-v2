@@ -44,6 +44,12 @@ export interface ServerConfig {
   tls?: TlsConfig;
 }
 
+interface ListeningServer {
+  listen(port: number, host: string, callback: () => void): unknown;
+  once(event: "error", listener: (error: Error) => void): this;
+  off(event: "error", listener: (error: Error) => void): this;
+}
+
 /**
  * Warn when the API is exposed on a non-loopback address without TLS.
  * Loopback addresses (127.x.x.x, ::1, localhost) are safe without TLS.
@@ -52,12 +58,42 @@ export function warnIfInsecure(config: Pick<ServerConfig, "host" | "tls">): void
   const loopback = /^(127\.\d+\.\d+\.\d+|::1|localhost)$/;
   if (!config.tls && !loopback.test(config.host)) {
     console.warn(
-      // eslint-disable-line no-console
       "⚠️  WARNING: API server is listening on a non-loopback address without TLS. " +
         "Credentials (JWT tokens, API keys) will be transmitted in plaintext. " +
         "Set api.tls in your configuration to enable HTTPS."
     );
   }
+}
+
+function listenServer(
+  server: ListeningServer,
+  port: number,
+  host: string,
+  onListening: () => void
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off("error", onError);
+      reject(error);
+    };
+
+    server.once("error", onError);
+
+    try {
+      server.listen(port, host, () => {
+        server.off("error", onError);
+        try {
+          onListening();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      server.off("error", onError);
+      reject(error);
+    }
+  });
 }
 
 /**
@@ -84,44 +120,37 @@ export async function startServer(
       cert: readFileSync(config.tls.certPath),
     };
 
-    await new Promise<void>((resolve) => {
-      createAdaptorServer({
-        fetch: app.fetch,
-        serverOptions,
-        createServer: createHttpsServer,
-      }).listen(config.port, config.host, () => {
-        console.log(`✅ HTTPS server listening on https://${config.host}:${config.port}`); // eslint-disable-line no-console
-        resolve();
-      });
+    const httpsServer = createAdaptorServer({
+      fetch: app.fetch,
+      serverOptions,
+      createServer: createHttpsServer,
+    });
+    await listenServer(httpsServer, config.port, config.host, () => {
+      console.log(`✅ HTTPS server listening on https://${config.host}:${config.port}`); // eslint-disable-line no-console
     });
 
     if (config.tls.httpRedirectPort !== undefined) {
       const redirectPort = config.tls.httpRedirectPort;
       const httpsPort = config.port;
-      await new Promise<void>((resolve) => {
-        createHttpServer((req, res) => {
-          const host = (req.headers.host ?? "localhost").split(":")[0];
-          const location = `https://${host}${httpsPort !== 443 ? `:${httpsPort}` : ""}${req.url ?? "/"}`;
-          res.writeHead(301, { Location: location });
-          res.end();
-        }).listen(redirectPort, config.host, () => {
-          console.log(
-            // eslint-disable-line no-console
-            `✅ HTTP→HTTPS redirect server listening on http://${config.host}:${redirectPort}`
-          );
-          resolve();
-        });
+      const redirectServer = createHttpServer((req, res) => {
+        const host = (req.headers.host ?? "localhost").split(":")[0];
+        const location = `https://${host}${httpsPort !== 443 ? `:${httpsPort}` : ""}${req.url ?? "/"}`;
+        res.writeHead(301, { Location: location });
+        res.end();
+      });
+      await listenServer(redirectServer, redirectPort, config.host, () => {
+        console.log(
+          `✅ HTTP→HTTPS redirect server listening on http://${config.host}:${redirectPort}`
+        );
       });
     }
 
     return { port: config.port, secure: true };
   }
 
-  await new Promise<void>((resolve) => {
-    createAdaptorServer({ fetch: app.fetch }).listen(config.port, config.host, () => {
-      console.log(`✅ HTTP server listening on http://${config.host}:${config.port}`); // eslint-disable-line no-console
-      resolve();
-    });
+  const httpServer = createAdaptorServer({ fetch: app.fetch });
+  await listenServer(httpServer, config.port, config.host, () => {
+    console.log(`✅ HTTP server listening on http://${config.host}:${config.port}`); // eslint-disable-line no-console
   });
 
   return { port: config.port, secure: false };
