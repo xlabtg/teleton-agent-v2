@@ -5,6 +5,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock all external wallet dependencies before importing sendTon
+const mockTransferHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const mockTransfer = {
+  hash: vi.fn().mockReturnValue(Buffer.from(mockTransferHash, "hex")),
+};
+const mockCreateTransfer = vi.fn().mockResolvedValue(mockTransfer);
+const mockSend = vi.fn().mockResolvedValue(undefined);
+
 vi.mock("../../v1-src/ton/wallet-service.js", () => ({
   getKeyPair: vi.fn().mockResolvedValue({
     publicKey: new Uint8Array(32),
@@ -13,7 +20,8 @@ vi.mock("../../v1-src/ton/wallet-service.js", () => ({
   getCachedTonClient: vi.fn().mockResolvedValue({
     open: vi.fn().mockReturnValue({
       getSeqno: vi.fn().mockResolvedValue(1),
-      sendTransfer: vi.fn().mockResolvedValue(undefined),
+      createTransfer: mockCreateTransfer,
+      send: mockSend,
     }),
   }),
   invalidateTonClientCache: vi.fn(),
@@ -113,8 +121,18 @@ describe("sendTon — input validation", () => {
       comment: "test payment",
       bounce: false,
     });
-    // Returns a pseudo-hash string on success
-    expect(typeof result).toBe("string");
+    expect(result).toBe(mockTransferHash);
+    expect(result).toMatch(/^[0-9a-f]{64}$/);
+    expect(result).not.toMatch(/^\d+_\d+_\d+\.\d{2}$/);
+    expect(mockCreateTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seqno: 1,
+        sendMode: 1,
+        messages: [{}],
+      })
+    );
+    expect(mockSend).toHaveBeenCalledWith(mockTransfer);
+    expect(mockTransfer.hash).toHaveBeenCalled();
   });
 
   it("should succeed with exactly 127-byte comment", async () => {
