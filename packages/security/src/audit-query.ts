@@ -101,19 +101,32 @@ export class AuditQuery {
   private toCefLine(e: StoredAuditEvent): string {
     const severityNum = this.cefSeverity(e.severity);
     const ext = [
-      `act=${e.action}`,
-      `outcome=${e.outcome}`,
-      `suser=${e.actor.id}`,
-      `cat=${e.category}`,
+      `act=${escapeCefExtensionValue(e.action)}`,
+      `outcome=${escapeCefExtensionValue(e.outcome)}`,
+      `suser=${escapeCefExtensionValue(e.actor.id)}`,
+      `cat=${escapeCefExtensionValue(e.category)}`,
       `rt=${new Date(e.timestamp).getTime()}`,
     ].join(" ");
 
     // CEF:0|Teleton|SecurityAudit|2.0|<action>|<action>|<severity>|extension
-    return `CEF:0|Teleton|SecurityAudit|2.0|${e.action}|${e.action}|${severityNum}|${ext}`;
+    const action = escapeCefHeaderField(e.action);
+    return `CEF:0|Teleton|SecurityAudit|2.0|${action}|${action}|${severityNum}|${ext}`;
   }
 
   private cefSeverity(s: AuditSeverity): number {
     const map: Record<AuditSeverity, number> = { info: 2, warning: 5, error: 7, critical: 10 };
     return map[s];
   }
+}
+
+function escapeCefHeaderField(value: string): string {
+  return escapeCefControlChars(value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|"));
+}
+
+function escapeCefExtensionValue(value: string): string {
+  return escapeCefControlChars(value.replace(/\\/g, "\\\\").replace(/=/g, "\\="));
+}
+
+function escapeCefControlChars(value: string): string {
+  return value.replace(/\n/g, "\\n").replace(/\r/g, "\\r");
 }

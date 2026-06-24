@@ -98,4 +98,30 @@ describe("AuditQuery", () => {
     const lines = cef.split("\n");
     expect(lines[0]).toMatch(/^CEF:0\|Teleton\|SecurityAudit\|/);
   });
+
+  it("exportCef escapes CEF metacharacters in header and extension fields", async () => {
+    store = new AuditStore();
+    query = new AuditQuery(store);
+
+    await store.append(
+      makeEvent({
+        action: String.raw`tool|run\phase` + "\nnext\rline=value",
+        category: "agent_action",
+        outcome: "failure",
+        actor: { type: "api_key", id: String.raw`api=user\42` + "\nforged\ractor" },
+      })
+    );
+
+    const cef = query.exportCef();
+
+    expect(cef).toBe(
+      String.raw`CEF:0|Teleton|SecurityAudit|2.0|tool\|run\\phase\nnext\rline=value|tool\|run\\phase\nnext\rline=value|2|act=tool|` +
+        String.raw`run\\phase\nnext\rline\=value outcome=failure suser=api\=user\\42\nforged\ractor cat=agent_action ` +
+        `rt=${new Date(query.query().events[0].timestamp).getTime()}`
+    );
+    expect(cef.split("\n")).toHaveLength(1);
+    const unescapedHeaderPipes = [...cef.matchAll(/(?<!\\)\|/g)].slice(0, 7);
+    expect(unescapedHeaderPipes).toHaveLength(7);
+    expect(cef.slice((unescapedHeaderPipes[6].index ?? 0) + 1)).toMatch(/^act=/);
+  });
 });
