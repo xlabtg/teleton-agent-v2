@@ -95,6 +95,15 @@ describe("SQLiteMemoryRepository", () => {
     expect(results).toEqual([]);
   });
 
+  it.each(["", "   \n\t"])(
+    "should return empty array for empty keyword search without invoking FTS (%j)",
+    async (query) => {
+      await repo.store(makeEntry({ content: "hello world" }));
+
+      await expect(repo.search(query)).resolves.toEqual([]);
+    }
+  );
+
   it("should respect the limit parameter in search", async () => {
     for (let i = 0; i < 5; i++) {
       await repo.store(makeEntry({ content: `repeating keyword entry ${i}` }));

@@ -208,6 +208,8 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
   }
 
   async search(query: string, limit: number = 10): Promise<MemoryEntry[]> {
+    if (query.trim().length === 0) return [];
+
     const rows = this.db
       .prepare(
         `
