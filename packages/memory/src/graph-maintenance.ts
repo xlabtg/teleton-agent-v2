@@ -179,25 +179,47 @@ export class GraphMaintenance {
     const outEdges = this.store.getEdgesFrom(fromNodeId);
     for (const edge of outEdges) {
       if (edge.targetId === toNodeId) continue; // Skip self-loops
-      this.store.addEdge({
-        sourceId: toNodeId,
-        targetId: edge.targetId,
-        type: edge.type as EdgeType,
-        weight: edge.weight,
-        properties: edge.properties,
-      });
+      this.addOrUpdateTransferredEdge(
+        toNodeId,
+        edge.targetId,
+        edge.type as EdgeType,
+        edge.weight,
+        edge.properties
+      );
     }
 
     const inEdges = this.store.getEdgesTo(fromNodeId);
     for (const edge of inEdges) {
       if (edge.sourceId === toNodeId) continue; // Skip self-loops
-      this.store.addEdge({
-        sourceId: edge.sourceId,
-        targetId: toNodeId,
-        type: edge.type as EdgeType,
-        weight: edge.weight,
-        properties: edge.properties,
-      });
+      this.addOrUpdateTransferredEdge(
+        edge.sourceId,
+        toNodeId,
+        edge.type as EdgeType,
+        edge.weight,
+        edge.properties
+      );
     }
+  }
+
+  private addOrUpdateTransferredEdge(
+    sourceId: string,
+    targetId: string,
+    type: EdgeType,
+    weight: number,
+    properties: Record<string, unknown>
+  ): void {
+    const existing = this.store.findEdge(sourceId, targetId, type);
+    if (existing) {
+      this.store.updateEdgeWeight(existing.id, Math.max(existing.weight, weight));
+      return;
+    }
+
+    this.store.addEdge({
+      sourceId,
+      targetId,
+      type,
+      weight,
+      properties,
+    });
   }
 }

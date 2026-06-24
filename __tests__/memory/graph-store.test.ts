@@ -132,6 +132,31 @@ describe("InMemoryGraphStore", () => {
       expect(store.getEdgesFrom(a.id, "mentions")).toHaveLength(1);
     });
 
+    it("should find an edge by source, target, and type", () => {
+      const a = store.addNode({ type: "entity", label: "A", properties: {} });
+      const b = store.addNode({ type: "entity", label: "B", properties: {} });
+      const c = store.addNode({ type: "entity", label: "C", properties: {} });
+
+      const edge = store.addEdge({
+        sourceId: a.id,
+        targetId: b.id,
+        type: "related_to",
+        weight: 0.5,
+        properties: {},
+      });
+      store.addEdge({
+        sourceId: a.id,
+        targetId: c.id,
+        type: "related_to",
+        weight: 0.8,
+        properties: {},
+      });
+
+      expect(store.findEdge(a.id, b.id, "related_to")).toBe(edge);
+      expect(store.findEdge(a.id, b.id, "mentions")).toBeUndefined();
+      expect(store.findEdge(b.id, a.id, "related_to")).toBeUndefined();
+    });
+
     it("should update edge weight", () => {
       const a = store.addNode({ type: "entity", label: "A", properties: {} });
       const b = store.addNode({ type: "entity", label: "B", properties: {} });

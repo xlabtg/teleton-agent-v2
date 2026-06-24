@@ -45,6 +45,7 @@ export interface GraphStore {
   removeNode(id: string): boolean;
 
   addEdge(edge: Omit<GraphEdge, "id" | "createdAt">): GraphEdge;
+  findEdge(sourceId: string, targetId: string, type: EdgeType): GraphEdge | undefined;
   getEdgesFrom(nodeId: string, type?: EdgeType): GraphEdge[];
   getEdgesTo(nodeId: string, type?: EdgeType): GraphEdge[];
   removeEdge(id: string): boolean;
@@ -159,6 +160,19 @@ export class InMemoryGraphStore implements GraphStore {
     this.outEdges.get(edge.sourceId)!.add(edge.id);
     this.inEdges.get(edge.targetId)!.add(edge.id);
     return edge;
+  }
+
+  findEdge(sourceId: string, targetId: string, type: EdgeType): GraphEdge | undefined {
+    const edgeIds = this.outEdges.get(sourceId) ?? new Set();
+
+    for (const id of edgeIds) {
+      const edge = this.edges.get(id);
+      if (edge?.targetId === targetId && edge.type === type) {
+        return edge;
+      }
+    }
+
+    return undefined;
   }
 
   getEdgesFrom(nodeId: string, type?: EdgeType): GraphEdge[] {
