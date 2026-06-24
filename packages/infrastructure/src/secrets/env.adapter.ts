@@ -1,6 +1,8 @@
 /**
  * Environment-based secrets adapter.
- * Reads secrets from environment variables.
+ * Reads secrets from environment variables and process-local overrides.
+ * set() stores values only for the lifetime of the current Node.js process.
+ * delete() removes both the process-local override and the matching process.env key.
  * For production, replace with Vault or AWS Secrets Manager adapter.
  */
 
@@ -24,6 +26,7 @@ export class EnvSecretsAdapter implements SecretsProvider {
 
   async delete(key: string): Promise<void> {
     this.overrides.delete(key);
+    delete process.env[`${this.prefix}${key}`];
   }
 
   async has(key: string): Promise<boolean> {
