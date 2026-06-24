@@ -133,6 +133,27 @@ describe("SQLiteMemoryRepository", () => {
     expect(results.map((result) => result.id)).toContain(entry.id);
   });
 
+  it.each([
+    [384, 38],
+    [128, 12],
+  ])(
+    "should reject prefix-colliding embedding dimensions without dropping existing vectors (%i vs %i)",
+    async (storedDim, requestedDim) => {
+      const embedding = Array.from({ length: storedDim }, (_, index) => (index === 0 ? 1 : 0));
+      const entry = await repo.store(makeEntry({ content: "kept vector", embedding }));
+
+      await expect(
+        repo.store({
+          ...makeEntry({ content: "prefix-colliding dimension" }),
+          embedding: Array.from({ length: requestedDim }, (_, index) => (index === 0 ? 1 : 0)),
+        })
+      ).rejects.toThrow(/memory_vec embedding dimension mismatch/i);
+
+      const results = await repo.searchByEmbedding(embedding, 10);
+      expect(results.map((result) => result.id)).toContain(entry.id);
+    }
+  );
+
   // -- update ----------------------------------------------------------------
 
   it("should update an existing entry", async () => {
