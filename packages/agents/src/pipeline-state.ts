@@ -5,15 +5,9 @@
  * to prevent illegal jumps (e.g. "completed" → "running").
  */
 
-export type PipelineStatus =
-  | "pending"
-  | "running"
-  | "paused"
-  | "completed"
-  | "failed"
-  | "rolled_back";
+export type PipelineStatus = "pending" | "running" | "completed" | "failed" | "rolled_back";
 
-export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped" | "rolled_back";
+export type StepStatus = "pending" | "running" | "completed" | "failed" | "rolled_back";
 
 export interface StepDefinition {
   /** Unique step name within the pipeline. */
@@ -66,15 +60,14 @@ export interface PipelineState {
 /** Allowed status transitions for a pipeline. */
 const PIPELINE_TRANSITIONS: Record<PipelineStatus, PipelineStatus[]> = {
   pending: ["running", "failed"],
-  running: ["paused", "completed", "failed"],
-  paused: ["running", "failed"],
+  running: ["completed", "failed"],
   completed: [],
   failed: ["rolled_back"],
   rolled_back: [],
 };
 
 export function validatePipelineTransition(from: PipelineStatus, to: PipelineStatus): void {
-  const allowed = PIPELINE_TRANSITIONS[from];
+  const allowed = PIPELINE_TRANSITIONS[from] ?? [];
   if (!allowed.includes(to)) {
     throw new Error(
       `Invalid pipeline status transition: "${from}" → "${to}". Allowed: ${allowed.join(", ") || "none"}`
