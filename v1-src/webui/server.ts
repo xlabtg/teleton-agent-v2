@@ -20,8 +20,8 @@ import {
   COOKIE_NAME,
   ACTIVITY_COOKIE_NAME,
   COOKIE_MAX_AGE,
-  DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
 } from "./middleware/auth.js";
+import { createWebUIApiAuthMiddleware } from "./middleware/api-auth.js";
 import { initSecurity } from "../services/security.js";
 import { logInterceptor } from "./log-interceptor.js";
 import { createStatusRoutes } from "./routes/status.js";
@@ -172,59 +172,11 @@ export class WebUIServer {
     });
 
     // Auth for all /api/* routes
-    // Accepts: HttpOnly cookie > Bearer header > ?token= query param (fallback)
-    this.app.use("/api/*", async (c, next) => {
-      // Resolve inactivity timeout from security settings (fallback to default)
-      let inactivityTimeoutSeconds: number | null = DEFAULT_INACTIVITY_TIMEOUT_SECONDS;
-      try {
-        const security = initSecurity(this.deps.memory.db);
-        const settings = security.getSettings();
-        inactivityTimeoutSeconds =
-          settings.session_timeout_minutes !== null
-            ? settings.session_timeout_minutes * 60
-            : null; // null = no timeout
-      } catch {
-        // If DB is unavailable, fall back to default timeout
-      }
-
-      // 1. Check HttpOnly session cookie (primary — browser)
-      const cookieToken = getCookie(c, COOKIE_NAME);
-      if (cookieToken && safeCompare(cookieToken, this.authToken)) {
-        // Enforce inactivity timeout via last-activity cookie
-        if (inactivityTimeoutSeconds !== null) {
-          const lastActivityRaw = getCookie(c, ACTIVITY_COOKIE_NAME);
-          if (lastActivityRaw) {
-            const lastActivity = parseInt(lastActivityRaw, 10);
-            const now = Math.floor(Date.now() / 1000);
-            if (!isNaN(lastActivity) && now - lastActivity > inactivityTimeoutSeconds) {
-              deleteCookie(c, COOKIE_NAME, { path: "/" });
-              deleteCookie(c, ACTIVITY_COOKIE_NAME, { path: "/" });
-              return c.json({ success: false, error: "Session expired due to inactivity" }, 401);
-            }
-          }
-          // Update last activity on every authenticated request
-          this.updateActivityCookie(c);
-        }
-        return next();
-      }
-
-      // 2. Check Authorization header (secondary — API/curl)
-      const authHeader = c.req.header("Authorization");
-      if (authHeader) {
-        const match = authHeader.match(/^Bearer\s+(.+)$/i);
-        if (match && safeCompare(match[1], this.authToken)) {
-          return next();
-        }
-      }
-
-      // 3. Check ?token= query param (fallback — backward compat)
-      const queryToken = c.req.query("token");
-      if (queryToken && safeCompare(queryToken, this.authToken)) {
-        return next();
-      }
-
-      return c.json({ success: false, error: "Unauthorized" }, 401);
-    });
+    // Accepts: HttpOnly cookie > Bearer header
+    this.app.use(
+      "/api/*",
+      createWebUIApiAuthMiddleware(this.deps, this.authToken, (c) => this.updateActivityCookie(c))
+    );
 
     // Audit logging for mutating API requests (after auth, so unauthenticated requests are not logged)
     this.app.use("/api/*", createAuditMiddleware(this.deps));
