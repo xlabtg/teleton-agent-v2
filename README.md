@@ -412,7 +412,8 @@ api:
 security:
   rate_limit_window: 900000 # Rate limit window in ms (default: 15 minutes)
   rate_limit_max: 100 # Max requests per window per IP
-  # jwt_secret: ""           # Set via TELETON_JWT_SECRET env var
+  # jwt_secret: "replace-with-at-least-32-random-characters"
+  # Required in production; TELETON_JWT_SECRET can also provide this value.
 
 agent:
   max_iterations: 20 # Max agentic loop iterations per task
@@ -427,16 +428,21 @@ agent:
 
 All sensitive values can be set via environment variables with the `TELETON_` prefix:
 
-| Variable                    | Description                                   |
-| --------------------------- | --------------------------------------------- |
-| `TELETON_TELEGRAM_API_ID`   | Telegram API ID (from my.telegram.org/apps)   |
-| `TELETON_TELEGRAM_API_HASH` | Telegram API hash (from my.telegram.org/apps) |
-| `TELETON_TELEGRAM_SESSION`  | Telegram session string (base64 encoded)      |
-| `TELETON_TON_MNEMONIC`      | TON wallet mnemonic phrase                    |
-| `TELETON_LLM_API_KEY`       | LLM provider API key                          |
-| `TELETON_JWT_SECRET`        | JWT signing secret for API authentication     |
+| Variable                    | Description                                           |
+| --------------------------- | ----------------------------------------------------- |
+| `TELETON_TELEGRAM_API_ID`   | Telegram API ID (from my.telegram.org/apps)           |
+| `TELETON_TELEGRAM_API_HASH` | Telegram API hash (from my.telegram.org/apps)         |
+| `TELETON_TELEGRAM_SESSION`  | Telegram session string (base64 encoded)              |
+| `TELETON_TON_MNEMONIC`      | TON wallet mnemonic phrase                            |
+| `TELETON_LLM_API_KEY`       | LLM provider API key                                  |
+| `TELETON_JWT_SECRET`        | JWT signing secret for API authentication (32+ chars) |
 
 Environment variables take precedence over values in the config file.
+
+`security.jwt_secret` / `TELETON_JWT_SECRET` must be a stable, high-entropy
+value with at least 32 characters. Production startup fails when it is missing.
+Non-production startup generates an ephemeral per-process secret and logs a
+warning; tokens issued with that fallback are invalid after restart.
 
 ---
 
@@ -659,7 +665,7 @@ docker run \
   -e TELETON_TELEGRAM_API_ID=12345678 \
   -e TELETON_TELEGRAM_API_HASH=your_api_hash \
   -e TELETON_LLM_API_KEY=sk-ant-... \
-  -e TELETON_JWT_SECRET=your-secret \
+  -e TELETON_JWT_SECRET=replace-with-at-least-32-random-characters \
   teleton-agent-v2
 ```
 

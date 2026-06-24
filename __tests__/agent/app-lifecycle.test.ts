@@ -7,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeletonApp } from "../../apps/agent/src/index.js";
 
 const HOST = "127.0.0.1";
+const TEST_JWT_SECRET = "test-jwt-secret-that-is-at-least-32-chars";
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+const ORIGINAL_TELETON_JWT_SECRET = process.env.TELETON_JWT_SECRET;
 
 const runningApps: TeletonApp[] = [];
 const tempDirs: string[] = [];
@@ -15,6 +18,9 @@ afterEach(async () => {
   await Promise.all(runningApps.map((app) => app.stop().catch(() => {})));
   runningApps.length = 0;
 
+  restoreEnvironment();
+  vi.restoreAllMocks();
+
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -22,6 +28,7 @@ afterEach(async () => {
 
 describe("TeletonApp lifecycle", () => {
   it("registers fatal process handlers and removes them on stop", async () => {
+    delete process.env.TELETON_JWT_SECRET;
     const initialUnhandledRejectionHandlers = process.listenerCount("unhandledRejection");
     const initialUncaughtExceptionHandlers = process.listenerCount("uncaughtException");
     const initialSigintHandlers = process.listenerCount("SIGINT");
@@ -56,6 +63,73 @@ describe("TeletonApp lifecycle", () => {
     expect(process.listenerCount("SIGINT")).toBe(initialSigintHandlers);
     expect(process.listenerCount("SIGTERM")).toBe(initialSigtermHandlers);
     await expect(fetch(`http://${HOST}:${port}/`)).rejects.toThrow();
+  });
+
+  it("refuses to start in production when the JWT secret is missing", async () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.TELETON_JWT_SECRET;
+
+    const tempDir = mkdtempSync(join(tmpdir(), "teleton-app-"));
+    tempDirs.push(tempDir);
+    const port = await findFreePort();
+    const app = new TeletonApp({
+      shutdownTimeoutMs: 100,
+      exitProcess: vi.fn((code: number) => {
+        throw new Error(`Unexpected process exit ${code}`);
+      }) as (code: number) => never,
+    });
+    runningApps.push(app);
+
+    await expect(app.start(writeConfig(tempDir, port, null))).rejects.toThrow(
+      /security\.jwt_secret.*required in production/
+    );
+    expect(app.isRunning()).toBe(false);
+  });
+
+  it("warns and uses an ephemeral JWT secret in development when none is configured", async () => {
+    process.env.NODE_ENV = "development";
+    delete process.env.TELETON_JWT_SECRET;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const tempDir = mkdtempSync(join(tmpdir(), "teleton-app-"));
+    tempDirs.push(tempDir);
+    const port = await findFreePort();
+    const app = new TeletonApp({
+      shutdownTimeoutMs: 100,
+      exitProcess: vi.fn((code: number) => {
+        throw new Error(`Unexpected process exit ${code}`);
+      }) as (code: number) => never,
+    });
+    runningApps.push(app);
+
+    await app.start(writeConfig(tempDir, port, null));
+
+    expect(app.isRunning()).toBe(true);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("ephemeral development JWT secret")
+    );
+  });
+
+  it("lets TELETON_JWT_SECRET override a weak config value in production", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.TELETON_JWT_SECRET = TEST_JWT_SECRET;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const tempDir = mkdtempSync(join(tmpdir(), "teleton-app-"));
+    tempDirs.push(tempDir);
+    const port = await findFreePort();
+    const app = new TeletonApp({
+      shutdownTimeoutMs: 100,
+      exitProcess: vi.fn((code: number) => {
+        throw new Error(`Unexpected process exit ${code}`);
+      }) as (code: number) => never,
+    });
+    runningApps.push(app);
+
+    await app.start(writeConfig(tempDir, port, "secret"));
+
+    expect(app.isRunning()).toBe(true);
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -98,9 +172,28 @@ function closeServer(server: HttpServer): Promise<void> {
   });
 }
 
-function writeConfig(tempDir: string, port: number): string {
+function restoreEnvironment(): void {
+  if (ORIGINAL_NODE_ENV === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  }
+
+  if (ORIGINAL_TELETON_JWT_SECRET === undefined) {
+    delete process.env.TELETON_JWT_SECRET;
+  } else {
+    process.env.TELETON_JWT_SECRET = ORIGINAL_TELETON_JWT_SECRET;
+  }
+}
+
+function writeConfig(
+  tempDir: string,
+  port: number,
+  jwtSecret: string | null = TEST_JWT_SECRET
+): string {
   const configPath = join(tempDir, "config.yaml");
   const databasePath = join(tempDir, "teleton.db");
+  const jwtSecretLine = jwtSecret === null ? "" : `  jwt_secret: ${JSON.stringify(jwtSecret)}\n`;
 
   writeFileSync(
     configPath,
@@ -115,8 +208,7 @@ api:
   host: "${HOST}"
   cors: []
 security:
-  jwt_secret: "test-secret-key"
-  rate_limit_window: 60000
+${jwtSecretLine}  rate_limit_window: 60000
   rate_limit_max: 100
 agent:
   max_iterations: 1

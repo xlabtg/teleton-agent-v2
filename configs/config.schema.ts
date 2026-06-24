@@ -4,6 +4,15 @@
 
 import { z } from "zod";
 
+export const JWT_SECRET_MIN_LENGTH = 32;
+
+export const jwtSecretSchema = z
+  .string()
+  .min(
+    JWT_SECRET_MIN_LENGTH,
+    `JWT signing secret must be at least ${JWT_SECRET_MIN_LENGTH} characters long`
+  );
+
 export const telegramConfigSchema = z.object({
   api_id: z.number().int().positive(),
   api_hash: z.string().min(1),
@@ -47,7 +56,7 @@ export const apiConfigSchema = z.object({
 });
 
 export const securityConfigSchema = z.object({
-  jwt_secret: z.string().optional(),
+  jwt_secret: jwtSecretSchema.optional(),
   rate_limit_window: z.number().int().positive().default(900000),
   rate_limit_max: z.number().int().positive().default(100),
 });

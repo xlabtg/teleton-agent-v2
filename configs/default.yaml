@@ -29,7 +29,7 @@ api:
 security:
   rate_limit_window: 900000 # 15 minutes in ms
   rate_limit_max: 100
-  # jwt_secret: "" # Set via TELETON_JWT_SECRET env var
+  # jwt_secret: "replace-with-at-least-32-random-characters" # Required in production
 
 agent:
   max_iterations: 20
