@@ -7,7 +7,7 @@
 
 import { chmodSync, existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
-import { TELETON_ROOT, WORKSPACE_PATHS } from "./paths.js";
+import { TELETON_ROOT, WORKSPACE_ROOT, WORKSPACE_PATHS } from "./paths.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Permissions");
@@ -37,12 +37,16 @@ const SECURE_DIRS = ["secrets", "plugins", "tls"];
 export function hardenExistingPermissions(): void {
   let hardened = 0;
 
-  // 1. Root-level sensitive files
+  // 1. Root and workspace directories
+  hardened += hardenDirectoryMode(TELETON_ROOT);
+  hardened += hardenDirectoryMode(WORKSPACE_ROOT);
+
+  // 2. Root-level sensitive files
   for (const file of ROOT_FILES) {
     hardened += hardenFile(join(TELETON_ROOT, file));
   }
 
-  // 2. Workspace files (MEMORY.md, IDENTITY.md, etc.)
+  // 3. Workspace files (MEMORY.md, IDENTITY.md, etc.)
   for (const path of [
     WORKSPACE_PATHS.MEMORY,
     WORKSPACE_PATHS.IDENTITY,
@@ -55,34 +59,39 @@ export function hardenExistingPermissions(): void {
     hardened += hardenFile(path);
   }
 
-  // 3. Memory directory (session files, daily logs)
+  // 4. Memory directory (session files, daily logs)
   hardened += hardenDirectory(WORKSPACE_PATHS.MEMORY_DIR, TARGET_MODE);
 
-  // 4. Downloads directory
+  // 5. Downloads directory
   hardened += hardenDirectory(WORKSPACE_PATHS.DOWNLOADS_DIR, TARGET_MODE);
 
-  // 5. Secure directories themselves
+  // 6. Secure directories themselves
   for (const dir of SECURE_DIRS) {
     const dirPath = join(TELETON_ROOT, dir);
-    if (existsSync(dirPath)) {
-      try {
-        const stat = statSync(dirPath);
-        if ((stat.mode & 0o777) !== TARGET_DIR_MODE) {
-          chmodSync(dirPath, TARGET_DIR_MODE);
-          hardened++;
-        }
-      } catch {
-        // Skip if inaccessible
-      }
-    }
+    hardened += hardenDirectoryMode(dirPath);
   }
 
-  // 6. Plugin files
+  // 7. Plugin files
   hardened += hardenDirectory(WORKSPACE_PATHS.PLUGINS_DIR, TARGET_MODE);
 
   if (hardened > 0) {
-    log.info(`Hardened permissions on ${hardened} existing file(s)`);
+    log.info(`Hardened permissions on ${hardened} existing path(s)`);
   }
+}
+
+function hardenDirectoryMode(dirPath: string): number {
+  if (!existsSync(dirPath)) return 0;
+  try {
+    const stat = statSync(dirPath);
+    if (!stat.isDirectory()) return 0;
+    if ((stat.mode & 0o777) !== TARGET_DIR_MODE) {
+      chmodSync(dirPath, TARGET_DIR_MODE);
+      return 1;
+    }
+  } catch {
+    // Skip directories we can't stat/chmod (e.g., owned by another user)
+  }
+  return 0;
 }
 
 function hardenFile(filePath: string): number {
