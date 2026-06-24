@@ -152,4 +152,48 @@ describe("AgentRuntime", () => {
     expect(result.error).toBe("Agent execution timed out after 20ms");
     expect(execute).toHaveBeenCalledWith({ value: true }, { signal: expect.any(AbortSignal) });
   });
+
+  it("does not mutate caller messages when processMessage records tool results", async () => {
+    const { runtime } = createRuntime();
+    const messages = [{ role: "user" as const, content: "Run the tool", timestamp: new Date() }];
+
+    runtime.registerTool({
+      name: "echo-tool",
+      execute: vi.fn().mockResolvedValue({ echoed: true }),
+    });
+
+    const agent = createAgent({
+      act: vi
+        .fn()
+        .mockResolvedValueOnce({
+          type: "tool_call",
+          toolName: "echo-tool",
+          toolArgs: { value: true },
+        })
+        .mockResolvedValueOnce({ type: "message", message: "done" }),
+      observe: vi
+        .fn()
+        .mockResolvedValueOnce({ summary: "tool complete", shouldContinue: true })
+        .mockResolvedValueOnce({ summary: "done", shouldContinue: false }),
+    });
+
+    const result = await runtime.processMessage(messages, agent);
+
+    expect(result).toBe("done");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ role: "user", content: "Run the tool" });
+    expect(agent.think).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        conversationHistory: [
+          messages[0],
+          expect.objectContaining({
+            role: "tool",
+            content: JSON.stringify({ echoed: true }),
+            metadata: { toolName: "echo-tool" },
+          }),
+        ],
+      }),
+      { signal: expect.any(AbortSignal) }
+    );
+  });
 });
