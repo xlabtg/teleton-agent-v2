@@ -188,6 +188,7 @@ export class EventStore {
     for (const event of events) {
       if (!existing.has(event.id)) {
         this.append(event);
+        existing.add(event.id);
       }
     }
   }
