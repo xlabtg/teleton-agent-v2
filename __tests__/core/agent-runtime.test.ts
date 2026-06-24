@@ -136,7 +136,18 @@ describe("AgentRuntime", () => {
       return waitForAbort(options!.signal!);
     });
 
-    runtime.registerTool({ name: "slow-tool", execute });
+    runtime.registerTool({
+      name: "slow-tool",
+      description: "Waits until aborted",
+      parameters: {
+        type: "object",
+        properties: {
+          value: { type: "boolean" },
+        },
+        required: ["value"],
+      },
+      execute,
+    });
 
     const agent = createAgent({
       act: vi.fn().mockResolvedValue({
@@ -159,6 +170,14 @@ describe("AgentRuntime", () => {
 
     runtime.registerTool({
       name: "echo-tool",
+      description: "Echoes input",
+      parameters: {
+        type: "object",
+        properties: {
+          value: { type: "boolean" },
+        },
+        required: ["value"],
+      },
       execute: vi.fn().mockResolvedValue({ echoed: true }),
     });
 
@@ -192,6 +211,74 @@ describe("AgentRuntime", () => {
             metadata: { toolName: "echo-tool" },
           }),
         ],
+      }),
+      { signal: expect.any(AbortSignal) }
+    );
+  });
+
+  it("returns registered tool descriptions and parameter schemas", () => {
+    const { runtime } = createRuntime();
+    const parameters = {
+      type: "object",
+      properties: {
+        text: { type: "string" },
+      },
+      required: ["text"],
+    };
+
+    runtime.registerTool({
+      name: "text-tool",
+      description: "Processes text",
+      parameters,
+      scope: "workspace",
+      execute: vi.fn(),
+    });
+
+    expect(runtime.getRegisteredTools()).toEqual([
+      {
+        name: "text-tool",
+        description: "Processes text",
+        parameters,
+        scope: "workspace",
+      },
+    ]);
+  });
+
+  it("validates tool arguments against the declared schema before execution", async () => {
+    const { runtime } = createRuntime();
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+
+    runtime.registerTool({
+      name: "validated-tool",
+      description: "Requires a string prompt",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          count: { type: "integer" },
+        },
+        required: ["prompt"],
+      },
+      execute,
+    });
+
+    const agent = createAgent({
+      act: vi.fn().mockResolvedValue({
+        type: "tool_call",
+        toolName: "validated-tool",
+        toolArgs: { count: 1 },
+      }),
+    });
+
+    const result = await runtime.executeTask(createTask(), agent);
+
+    expect(result.success).toBe(true);
+    expect(result.output).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(agent.observe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        error: "Invalid tool arguments: toolArgs.prompt is required",
       }),
       { signal: expect.any(AbortSignal) }
     );
