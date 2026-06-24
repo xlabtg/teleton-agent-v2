@@ -2,10 +2,10 @@
  * Injection detector — V2-13.
  * Detects prompt injection and other injection attacks using a two-stage pipeline:
  *   1. Pattern matching — fast regex-based scan for known injection signatures
- *   2. Heuristic classifier — lightweight scoring when pattern stage is inconclusive
+ *   2. Optional classifier — stronger scoring when pattern stage is inconclusive
  *
- * The classifier stage is designed to be replaceable with an LLM-backed classifier
- * by providing a custom `ClassifierFn` in the config.
+ * Built-in patterns are a coarse first-pass filter, not a complete security
+ * boundary. Production deployments should provide a robust classifier.
  */
 
 export type ClassifierFn = (input: string) => Promise<InjectionClassification>;
@@ -49,24 +49,50 @@ interface NamedPattern {
 }
 
 const STATEFUL_PATTERN_FLAGS = /[gy]/g;
+const INVISIBLE_CONTROL_CHARS =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/gu;
+const REPEATED_WHITESPACE = /\s+/g;
 
 function toStatelessPattern(pattern: RegExp): RegExp {
   return new RegExp(pattern.source, pattern.flags.replace(STATEFUL_PATTERN_FLAGS, ""));
 }
 
+function normalizeForDetection(input: string): string {
+  return input
+    .normalize("NFKC")
+    .replace(INVISIBLE_CONTROL_CHARS, "")
+    .replace(REPEATED_WHITESPACE, " ")
+    .trim();
+}
+
 /**
  * Known prompt injection / attack patterns.
- * Updated when new techniques are identified — keep this list minimal and precise
- * to reduce false-positive rate.
+ * Updated when new techniques are identified. These signatures intentionally
+ * cover common prompt-injection paraphrases, but they remain heuristic.
  */
 const BUILTIN_PATTERNS: NamedPattern[] = [
-  { name: "ignore_previous", pattern: /ignore\s+(all\s+)?previous\s+(instructions?|prompts?)/i },
+  {
+    name: "ignore_previous",
+    pattern:
+      /\b(ignore|disregard|forget|overlook|skip|bypass|discard)\b\s+(all\s+)?(the\s+)?\b(previous|prior|earlier|above|preceding)\b\s+\b(instructions?|prompts?|directives?|rules?|context)\b/i,
+  },
+  {
+    name: "forget_above",
+    pattern:
+      /\b(forget|discard|ignore)\b\s+(everything|all)\s+(above|before|so far|previously stated)\b/i,
+  },
   { name: "new_instructions", pattern: /\bnew\s+instructions?\s*:/i },
-  { name: "system_override", pattern: /\bsystem\s*:\s*you\s+are\b/i },
-  { name: "jailbreak_dan", pattern: /\bDAN\s+mode\b|\bdo\s+anything\s+now\b/i },
+  { name: "system_override", pattern: /\b(system|developer)\s*:\s*you\s+are\b/i },
+  { name: "jailbreak_dan", pattern: /\bDAN\s+mode\b|\bdo\s+anything\s+now\b|\bjailbreak\b/i },
   {
     name: "role_override",
-    pattern: /\bact\s+as\s+(if\s+you\s+are|a\s+)?[A-Z][a-z]+\s+without\s+(restrictions?|limits?)/i,
+    pattern:
+      /\b(act|pretend|behave)\s+as\s+(if\s+you\s+are|a\s+)?[a-z][a-z\s-]{1,40}\s+without\s+(restrictions?|limits?|guardrails?|polic(?:y|ies))/i,
+  },
+  {
+    name: "policy_override",
+    pattern:
+      /\b(disable|turn\s+off|override|bypass|ignore)\b\s+(the\s+)?\b(safety|security|policy|policies|guardrails?|restrictions?)\b/i,
   },
   { name: "base64_injection", pattern: /\bbase64\b.*\bdecode\b|\bdecode\b.*\bbase64\b/i },
   {
@@ -105,10 +131,11 @@ export class InjectionDetector {
    * Returns a DetectionResult with the recommended action.
    */
   async detect(input: string): Promise<DetectionResult> {
+    const normalizedInput = normalizeForDetection(input);
     const matchedPatterns: string[] = [];
 
     for (const { name, pattern } of this.patterns) {
-      if (pattern.test(input)) {
+      if (pattern.test(normalizedInput)) {
         matchedPatterns.push(name);
       }
     }
@@ -121,7 +148,7 @@ export class InjectionDetector {
     let classifierScore = 0;
     let classifierReason = "";
     if (this.classifier && patternScore < this.blockThreshold) {
-      const classification = await this.classifier(input);
+      const classification = await this.classifier(normalizedInput);
       classifierScore = classification.score;
       classifierReason = classification.reason;
     }
