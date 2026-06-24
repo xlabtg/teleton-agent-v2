@@ -18,7 +18,6 @@ vi.mock("../../v1-src/services/security.js", () => ({
 }));
 
 import { createWebUIApiAuthMiddleware } from "../../v1-src/webui/middleware/api-auth.js";
-import type { WebUIServerDeps } from "../../v1-src/webui/types.js";
 import { safeCompare } from "../../v1-src/webui/middleware/auth.js";
 
 const AUTH_TOKEN = "test-auth-token-with-enough-length";
@@ -27,7 +26,7 @@ function createTestApp() {
   const db = new Database(":memory:");
   const deps = {
     memory: { db },
-  } as unknown as WebUIServerDeps;
+  };
   const app = new Hono();
 
   app.use(

@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { getCookie, deleteCookie } from "hono/cookie";
+import type Database from "better-sqlite3";
 import { initSecurity } from "../../services/security.js";
-import type { WebUIServerDeps } from "../types.js";
 import {
   safeCompare,
   COOKIE_NAME,
@@ -9,8 +9,14 @@ import {
   DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
 } from "./auth.js";
 
+interface WebUIApiAuthDeps {
+  memory: {
+    db: Database.Database;
+  };
+}
+
 export function createWebUIApiAuthMiddleware(
-  deps: WebUIServerDeps,
+  deps: WebUIApiAuthDeps,
   authToken: string,
   updateActivityCookie: (c: unknown) => void
 ): MiddlewareHandler {
