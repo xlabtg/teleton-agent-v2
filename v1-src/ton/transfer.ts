@@ -70,7 +70,7 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
 
       const seqno = await contract.getSeqno();
 
-      await contract.sendTransfer({
+      const transfer = await contract.createTransfer({
         seqno,
         secretKey: keyPair.secretKey,
         sendMode: SendMode.PAY_GAS_SEPARATELY,
@@ -84,11 +84,15 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
         ],
       });
 
-      const pseudoHash = `${seqno}_${Date.now()}_${amount.toFixed(2)}`;
+      await contract.send(transfer);
 
-      log.info(`Sent ${amount} TON to ${toAddress.slice(0, 8)}... - seqno: ${seqno}`);
+      const txHash = transfer.hash().toString("hex");
 
-      return pseudoHash;
+      log.info(
+        `Sent ${amount} TON to ${toAddress.slice(0, 8)}... - seqno: ${seqno} - hash: ${txHash.slice(0, 8)}...`
+      );
+
+      return txHash;
     } catch (error: unknown) {
       // Invalidate node cache on 429/5xx so next attempt picks a fresh node
       const err = error as { status?: number; response?: { status?: number } };
