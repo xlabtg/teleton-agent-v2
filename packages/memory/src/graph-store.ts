@@ -87,9 +87,9 @@ export class InMemoryGraphStore implements GraphStore {
   }
 
   findNodesByLabel(label: string): GraphNode[] {
-    const normalized = label.toLowerCase();
-    return Array.from(this.nodes.values()).filter((n) =>
-      n.label.toLowerCase().includes(normalized)
+    const normalized = label.toLowerCase().trim();
+    return Array.from(this.nodes.values()).filter(
+      (n) => n.label.toLowerCase().trim() === normalized
     );
   }
 

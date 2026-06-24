@@ -8,6 +8,8 @@ import { RetentionPolicy } from "../../packages/memory/src/retention-policy.js";
 import type { MemoryEntry } from "../../packages/core/src/domain/agent.interface.js";
 import type { EventBus } from "../../packages/core/src/domain/events.js";
 import type { MemoryRepository } from "../../packages/core/src/ports/repository.port.js";
+import { InMemoryGraphStore } from "../../packages/memory/src/graph-store.js";
+import type { EntityExtractor } from "../../packages/memory/src/entity-extractor.js";
 import type { SemanticSearch } from "../../packages/memory/src/semantic-search.js";
 
 function makeEntry(id: string): MemoryEntry {
@@ -128,5 +130,57 @@ describe("MemoryManager", () => {
     expect(remaining[0].tags).toEqual(["cold", "compacted-summary"]);
 
     memoryRepository.close();
+  });
+
+  it("does not reuse graph nodes whose labels only contain the extracted label", async () => {
+    const memoryRepository = {
+      store: vi.fn(async (entry: Omit<MemoryEntry, "id">) => ({ ...entry, id: "mem-graph" })),
+      findById: vi.fn(),
+      list: vi.fn(),
+      search: vi.fn(),
+      searchByEmbedding: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      compact: vi.fn(),
+    } satisfies MemoryRepository;
+    const semanticSearch = { index: vi.fn() } as unknown as SemanticSearch;
+    const hybridRetrieval = { search: vi.fn() } as unknown as HybridRetrieval;
+    const scorer = { recordAccess: vi.fn() } as unknown as ImportanceScorer;
+    const retentionPolicy = { getEvictionCandidates: vi.fn() } as unknown as RetentionPolicy;
+    const compaction = { compact: vi.fn() } as unknown as MemoryCompaction;
+    const eventBus = { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn() } as EventBus;
+    const graphStore = new InMemoryGraphStore();
+    const daily = graphStore.addNode({ type: "concept", label: "Daily", properties: {} });
+    const entityExtractor = {
+      extract: vi.fn().mockResolvedValue({
+        entities: [{ label: "AI", type: "concept", properties: { source: "test" } }],
+        relations: [],
+      }),
+    } as unknown as EntityExtractor;
+    const manager = new MemoryManager(
+      memoryRepository,
+      semanticSearch,
+      hybridRetrieval,
+      scorer,
+      retentionPolicy,
+      compaction,
+      eventBus,
+      graphStore,
+      entityExtractor,
+      undefined,
+      { autoIndex: false }
+    );
+
+    await manager.store({
+      content: "AI planning",
+      importance: 0.5,
+      createdAt: new Date("2024-01-01T00:00:00Z"),
+      accessedAt: new Date("2024-01-01T00:00:00Z"),
+      tags: ["graph"],
+    });
+
+    expect(graphStore.findNodesByLabel("Daily")).toEqual([daily]);
+    expect(graphStore.findNodesByLabel("AI")).toHaveLength(1);
+    expect(graphStore.nodeCount()).toBe(2);
   });
 });
