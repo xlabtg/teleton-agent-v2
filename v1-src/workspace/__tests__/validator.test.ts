@@ -2,7 +2,7 @@
 
 import { mkdtempSync, rmSync, writeFileSync, symlinkSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { vi } from "vitest";
 import {
   validatePath,
@@ -220,6 +220,58 @@ describe("Workspace Path Validator", () => {
         } finally {
           rmSync(linkPath, { force: true });
         }
+      });
+
+      it("should reject paths with symlinked intermediate directories", () => {
+        const outsideDir = mkdtempSync(join(tmpdir(), "teleton-outside-"));
+        const linkPath = join(tempWorkspace, "linked-outside");
+
+        try {
+          writeFileSync(join(outsideDir, "secret.txt"), "outside");
+          symlinkSync(outsideDir, linkPath, "dir");
+
+          expect(() => validatePath("linked-outside/secret.txt")).toThrow(WorkspaceSecurityError);
+          expect(() => validatePath("linked-outside/secret.txt")).toThrow("outside the workspace");
+        } finally {
+          rmSync(linkPath, { force: true });
+          rmSync(outsideDir, { recursive: true, force: true });
+        }
+      });
+
+      it("should reject allowCreate paths through symlinked parent directories", () => {
+        const outsideDir = mkdtempSync(join(tmpdir(), "teleton-outside-"));
+        const linkPath = join(tempWorkspace, "linked-parent");
+
+        try {
+          symlinkSync(outsideDir, linkPath, "dir");
+
+          expect(() => validatePath("linked-parent/new-file.txt", true)).toThrow(
+            WorkspaceSecurityError
+          );
+          expect(() => validatePath("linked-parent/new-file.txt", true)).toThrow(
+            "outside the workspace"
+          );
+          expect(() => validateWritePath("linked-parent/new-file.txt")).toThrow(
+            WorkspaceSecurityError
+          );
+        } finally {
+          rmSync(linkPath, { force: true });
+          rmSync(outsideDir, { recursive: true, force: true });
+        }
+      });
+
+      it("should allow creating paths under real workspace parent directories", () => {
+        const result = validatePath("subdir/new-file.txt", true);
+
+        expect(result.exists).toBe(false);
+        expect(result.absolutePath).toBe(join(tempWorkspace, "subdir", "new-file.txt"));
+      });
+
+      it("should allow creating nested paths after validating nearest existing ancestor", () => {
+        const result = validatePath("subdir/new-dir/new-file.txt", true);
+
+        expect(result.exists).toBe(false);
+        expect(dirname(result.absolutePath)).toBe(join(tempWorkspace, "subdir", "new-dir"));
       });
     });
 

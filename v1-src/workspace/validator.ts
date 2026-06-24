@@ -1,7 +1,7 @@
 // src/workspace/validator.ts
 
-import { existsSync, lstatSync, readdirSync } from "fs";
-import { resolve, normalize, relative, extname, basename } from "path";
+import { existsSync, lstatSync, readdirSync, realpathSync } from "fs";
+import { resolve, normalize, relative, extname, basename, dirname, isAbsolute, sep } from "path";
 import { homedir } from "os";
 import { WORKSPACE_ROOT, ALLOWED_EXTENSIONS, MAX_FILE_SIZES } from "./paths.js";
 import { MAX_FILENAME_LENGTH } from "../constants/limits.js";
@@ -41,6 +41,41 @@ function decodeRecursive(str: string): string {
   }
 
   return decoded;
+}
+
+function assertInsideWorkspace(realPath: string, inputPath: string): string {
+  const realWorkspaceRoot = realpathSync(WORKSPACE_ROOT);
+  const realRelativePath = relative(realWorkspaceRoot, realPath);
+
+  if (
+    realRelativePath === ".." ||
+    realRelativePath.startsWith(`..${sep}`) ||
+    isAbsolute(realRelativePath)
+  ) {
+    throw new WorkspaceSecurityError(
+      `Access denied: Path '${inputPath}' is outside the workspace. ` +
+        `Only files in ~/.teleton/workspace/ are accessible.`,
+      inputPath
+    );
+  }
+
+  return realRelativePath;
+}
+
+function nearestExistingAncestor(path: string): string | null {
+  let current = path;
+
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+
+    if (parent === current) {
+      return null;
+    }
+
+    current = parent;
+  }
+
+  return current;
 }
 
 /**
@@ -106,11 +141,11 @@ export function validatePath(inputPath: string, allowCreate: boolean = false): V
     absolutePath = resolve(WORKSPACE_ROOT, normalize(decodedPath));
   }
 
-  // CRITICAL: Ensure path is within workspace
+  // CRITICAL: Ensure the lexical path is within workspace before touching disk.
   const relativePath = relative(WORKSPACE_ROOT, absolutePath);
 
   // Check for path traversal (../)
-  if (relativePath.startsWith("..") || relativePath.startsWith("/")) {
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
     throw new WorkspaceSecurityError(
       `Access denied: Path '${inputPath}' is outside the workspace. ` +
         `Only files in ~/.teleton/workspace/ are accessible.`,
@@ -128,9 +163,12 @@ export function validatePath(inputPath: string, allowCreate: boolean = false): V
     );
   }
 
-  // SECURITY FIX: Use lstatSync() instead of statSync() to detect symlinks
-  // (statSync follows symlinks, lstatSync does not)
   if (exists) {
+    const realAbsolutePath = realpathSync(absolutePath);
+    assertInsideWorkspace(realAbsolutePath, inputPath);
+
+    // SECURITY FIX: Use lstatSync() instead of statSync() to detect symlinks
+    // (statSync follows symlinks, lstatSync does not)
     const stats = lstatSync(absolutePath);
 
     if (stats.isSymbolicLink()) {
@@ -139,6 +177,18 @@ export function validatePath(inputPath: string, allowCreate: boolean = false): V
         inputPath
       );
     }
+  } else {
+    const existingAncestor = nearestExistingAncestor(absolutePath);
+
+    if (!existingAncestor) {
+      throw new WorkspaceSecurityError(
+        `Access denied: Path '${inputPath}' is outside the workspace. ` +
+          `Only files in ~/.teleton/workspace/ are accessible.`,
+        inputPath
+      );
+    }
+
+    assertInsideWorkspace(realpathSync(existingAncestor), inputPath);
   }
 
   return {
