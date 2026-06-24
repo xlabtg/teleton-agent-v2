@@ -76,6 +76,26 @@ describe("RateLimiter", () => {
     expect(result.banExpiresAt).toBeUndefined();
   });
 
+  it("unban() clears stale violations so the next violation does not immediately re-ban", () => {
+    const now = Date.now();
+    const rl = new RateLimiter({
+      windows: [{ windowMs: 10_000, maxRequests: 1 }],
+      abuseThreshold: 2,
+      abuseWindowMs: 60_000,
+      banDurationMs: 600_000,
+    });
+
+    rl.consume("bad", now);
+    rl.consume("bad", now); // violation 1
+    rl.consume("bad", now); // violation 2 -> ban
+    rl.unban("bad");
+
+    const result = rl.consume("bad", now + 1);
+    expect(result.allowed).toBe(false);
+    expect(result.banExpiresAt).toBeUndefined();
+    expect(rl.getViolationCount("bad", now + 1)).toBe(1);
+  });
+
   it("reset() clears all state for a key", () => {
     const rl = new RateLimiter({ windows: [{ windowMs: 1000, maxRequests: 1 }] });
     rl.consume("user");
@@ -151,6 +171,28 @@ describe("RateLimiter", () => {
     // Now the per-minute limit is exhausted
     const over = rl.consume("u", now + 20_000);
     expect(over.allowed).toBe(false);
+  });
+
+  it("does not persist an expired sibling window reset when another window denies", () => {
+    const now = Date.now();
+    const rl = new RateLimiter({
+      windows: [
+        { windowMs: 1_000, maxRequests: 1 },
+        { windowMs: 60_000, maxRequests: 2 },
+      ],
+    });
+
+    expect(rl.consume("u", now).allowed).toBe(true);
+    expect(rl.consume("u", now + 1_500).allowed).toBe(true);
+
+    const denied = rl.consume("u", now + 3_000);
+    expect(denied.allowed).toBe(false);
+    expect(denied.limitedByWindow).toBe(1);
+
+    const stillDenied = rl.consume("u", now + 3_500);
+    expect(stillDenied.allowed).toBe(false);
+    expect(stillDenied.limitedByWindow).toBe(1);
+    expect(stillDenied.resetAt).toBe(now + 60_000);
   });
 
   it("getViolationCount returns 0 for a clean key", () => {
