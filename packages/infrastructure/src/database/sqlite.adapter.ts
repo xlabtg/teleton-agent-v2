@@ -34,13 +34,28 @@ function serializeEmbedding(vec: number[]): Buffer {
 
 class SQLiteBase {
   protected readonly db: Database.Database;
+  private readonly connection: SQLiteConnection;
+
+  constructor(connection: SQLiteConnection | string) {
+    this.connection =
+      typeof connection === "string" ? new SQLiteConnection(connection) : connection;
+    this.db = this.connection.database;
+  }
+
+  close(): void {
+    this.connection.close();
+  }
+}
+
+export class SQLiteConnection {
+  readonly database: Database.Database;
   private closed = false;
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    sqliteVec.load(this.db);
+    this.database = new Database(dbPath);
+    this.database.pragma("journal_mode = WAL");
+    this.database.pragma("foreign_keys = ON");
+    sqliteVec.load(this.database);
   }
 
   close(): void {
@@ -48,7 +63,7 @@ class SQLiteBase {
       return;
     }
 
-    this.db.close();
+    this.database.close();
     this.closed = true;
   }
 }
@@ -66,8 +81,8 @@ class SQLiteBase {
  *   memory_vec — sqlite-vec virtual table for vector similarity search
  */
 export class SQLiteMemoryRepository extends SQLiteBase implements MemoryRepository {
-  constructor(dbPath: string) {
-    super(dbPath);
+  constructor(connection: SQLiteConnection | string) {
+    super(connection);
     this.initSchema();
   }
 
@@ -321,8 +336,8 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
  * SQLite-backed task repository with task results stored as JSON blobs.
  */
 export class SQLiteTaskRepository extends SQLiteBase implements TaskRepository {
-  constructor(dbPath: string) {
-    super(dbPath);
+  constructor(connection: SQLiteConnection | string) {
+    super(connection);
     this.initSchema();
   }
 
@@ -492,8 +507,8 @@ export class SQLiteTaskRepository extends SQLiteBase implements TaskRepository {
  * SQLite-backed session repository.
  */
 export class SQLiteSessionRepository extends SQLiteBase implements SessionRepository {
-  constructor(dbPath: string) {
-    super(dbPath);
+  constructor(connection: SQLiteConnection | string) {
+    super(connection);
     this.initSchema();
   }
 
@@ -567,8 +582,8 @@ export class SQLiteSessionRepository extends SQLiteBase implements SessionReposi
  * SQLite-backed event repository for audit logging and event sourcing.
  */
 export class SQLiteEventRepository extends SQLiteBase implements EventRepository {
-  constructor(dbPath: string) {
-    super(dbPath);
+  constructor(connection: SQLiteConnection | string) {
+    super(connection);
     this.initSchema();
   }
 

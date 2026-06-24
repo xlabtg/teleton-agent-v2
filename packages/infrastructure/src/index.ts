@@ -1,5 +1,6 @@
 // Database adapters
 export {
+  SQLiteConnection,
   SQLiteMemoryRepository,
   SQLiteTaskRepository,
   SQLiteSessionRepository,

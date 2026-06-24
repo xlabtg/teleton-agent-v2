@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  SQLiteConnection,
   SQLiteMemoryRepository,
   SQLiteTaskRepository,
   SQLiteSessionRepository,
@@ -210,6 +211,34 @@ describe("SQLiteMemoryRepository", () => {
     repo.close();
 
     await expect(repo.store(makeEntry())).rejects.toThrow(/closed|not open/i);
+  });
+});
+
+describe("SQLite repositories shared connection", () => {
+  it("should reuse one SQLite connection across repository instances", async () => {
+    const connection = new SQLiteConnection(":memory:");
+    const memoryRepo = new SQLiteMemoryRepository(connection);
+    const taskRepo = new SQLiteTaskRepository(connection);
+
+    await memoryRepo.store({
+      content: "shared connection memory",
+      importance: 0.5,
+      createdAt: new Date("2024-01-01T00:00:00Z"),
+      accessedAt: new Date("2024-01-01T00:00:00Z"),
+      tags: ["shared"],
+    });
+    const task = await taskRepo.create({
+      name: "shared-connection-task",
+      payload: {},
+      priority: { level: "normal", weight: 1 },
+    });
+
+    expect(await memoryRepo.search("shared")).toHaveLength(1);
+    expect(await taskRepo.findById(task.id)).not.toBeNull();
+
+    memoryRepo.close();
+
+    await expect(taskRepo.findById(task.id)).rejects.toThrow(/closed|not open/i);
   });
 });
 
