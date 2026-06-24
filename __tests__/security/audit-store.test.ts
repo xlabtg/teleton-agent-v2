@@ -77,6 +77,28 @@ describe("AuditStore", () => {
     expect(actions).not.toContain("action-0");
   });
 
+  it("verifyIntegrity returns true after maxEvents evicts older events", async () => {
+    const capped = new AuditStore({ maxEvents: 3 });
+    for (let i = 0; i < 5; i++) {
+      await capped.append(makeEvent({ action: `action-${i}` }));
+    }
+
+    expect(await capped.verifyIntegrity()).toBe(true);
+  });
+
+  it("verifyIntegrity returns false when a surviving event is mutated after eviction", async () => {
+    const capped = new AuditStore({ maxEvents: 3 });
+    for (let i = 0; i < 5; i++) {
+      await capped.append(makeEvent({ action: `action-${i}` }));
+    }
+
+    const oldestSurvivor = capped.getAll().at(-1);
+    expect(oldestSurvivor).toBeDefined();
+    oldestSurvivor!.action = "tampered";
+
+    expect(await capped.verifyIntegrity()).toBe(false);
+  });
+
   it("purgeExpired removes events past their TTL", async () => {
     const shortRetention = new AuditStore({ defaultRetentionMs: 1 }); // 1ms TTL
     await shortRetention.append(makeEvent());

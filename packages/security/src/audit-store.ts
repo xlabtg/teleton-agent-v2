@@ -30,6 +30,7 @@ export interface StoredAuditEvent extends AuditEvent {
 export class AuditStore {
   private readonly events: StoredAuditEvent[] = [];
   private lastHash = "";
+  private chainAnchor = "";
   private readonly sensitiveKeys: string[];
   private readonly defaultRetentionMs: number;
   private readonly retentionByCategory: Partial<Record<string, number>>;
@@ -58,7 +59,9 @@ export class AuditStore {
 
     // Enforce maxEvents cap (drop oldest)
     if (this.maxEvents > 0 && this.events.length > this.maxEvents) {
-      this.events.splice(0, this.events.length - this.maxEvents);
+      const removeCount = this.events.length - this.maxEvents;
+      this.events.splice(0, removeCount);
+      this.chainAnchor = this.events[0]?.previousHash ?? "";
     }
 
     return stored;
@@ -87,8 +90,10 @@ export class AuditStore {
    * the previous event's hash.
    */
   async verifyIntegrity(): Promise<boolean> {
-    let prev = "";
+    let prev = this.chainAnchor;
     for (const event of this.events) {
+      if (event.previousHash !== prev) return false;
+
       // Strip hash fields so we recompute from the original content only
       const { hash: _h, previousHash: _p, ...content } = event;
       const expected = await this.computeHash(content as AuditEvent, prev);
@@ -109,6 +114,7 @@ export class AuditStore {
     while (i < this.events.length) {
       if (this.isExpired(this.events[i], now)) {
         this.events.splice(i, 1);
+        this.chainAnchor = this.events[0]?.previousHash ?? "";
       } else {
         i++;
       }
