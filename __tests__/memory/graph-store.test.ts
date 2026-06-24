@@ -25,13 +25,14 @@ describe("InMemoryGraphStore", () => {
       expect(retrieved!.label).toBe("Alice");
     });
 
-    it("should find nodes by label", () => {
+    it("should find nodes by normalized exact label", () => {
       store.addNode({ type: "entity", label: "Alice", properties: {} });
       store.addNode({ type: "entity", label: "Bob", properties: {} });
       store.addNode({ type: "concept", label: "alice in wonderland", properties: {} });
 
-      const results = store.findNodesByLabel("alice");
-      expect(results).toHaveLength(2);
+      expect(store.findNodesByLabel("alice")).toHaveLength(1);
+      expect(store.findNodesByLabel(" Alice ")).toHaveLength(1);
+      expect(store.findNodesByLabel("alice in wonderland")).toHaveLength(1);
     });
 
     it("should find nodes by type", () => {
