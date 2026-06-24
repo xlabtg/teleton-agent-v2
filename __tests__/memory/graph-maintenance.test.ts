@@ -21,6 +21,66 @@ describe("GraphMaintenance", () => {
     expect(store.nodeCount()).toBe(2); // Alice + Bob
   });
 
+  it("should deduplicate overlapping transferred edges when merging nodes", () => {
+    const primary = store.addNode({ type: "entity", label: "Alice", properties: {} });
+    const duplicate = store.addNode({ type: "entity", label: "alice", properties: {} });
+    const target = store.addNode({ type: "entity", label: "Bob", properties: {} });
+    const source = store.addNode({ type: "entity", label: "Carol", properties: {} });
+
+    primary.accessedAt = new Date(Date.now() + 1000);
+
+    store.addEdge({
+      sourceId: primary.id,
+      targetId: target.id,
+      type: "related_to",
+      weight: 0.4,
+      properties: { existing: true },
+    });
+    store.addEdge({
+      sourceId: duplicate.id,
+      targetId: target.id,
+      type: "related_to",
+      weight: 0.9,
+      properties: { transferred: true },
+    });
+    store.addEdge({
+      sourceId: source.id,
+      targetId: primary.id,
+      type: "mentions",
+      weight: 0.8,
+      properties: { existing: true },
+    });
+    store.addEdge({
+      sourceId: source.id,
+      targetId: duplicate.id,
+      type: "mentions",
+      weight: 0.3,
+      properties: { transferred: true },
+    });
+
+    const maintenance = new GraphMaintenance(store);
+    const merged = maintenance.mergeDuplicates();
+
+    expect(merged).toBe(1);
+    expect(store.edgeCount()).toBe(2);
+
+    const outbound = store.getEdgesFrom(primary.id, "related_to");
+    expect(outbound).toHaveLength(1);
+    expect(outbound[0]).toMatchObject({
+      sourceId: primary.id,
+      targetId: target.id,
+      weight: 0.9,
+    });
+
+    const inbound = store.getEdgesTo(primary.id, "mentions");
+    expect(inbound).toHaveLength(1);
+    expect(inbound[0]).toMatchObject({
+      sourceId: source.id,
+      targetId: primary.id,
+      weight: 0.8,
+    });
+  });
+
   it("should decay edge weights", () => {
     const a = store.addNode({ type: "entity", label: "A", properties: {} });
     const b = store.addNode({ type: "entity", label: "B", properties: {} });
