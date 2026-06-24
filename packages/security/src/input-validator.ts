@@ -96,8 +96,9 @@ export class InputValidator {
       return { passed: false, stage: "syntax", errors: ["Input must be a string"], annotations };
     }
 
-    if (raw.length > this.maxInputLength) {
-      errors.push(`Input exceeds maximum length of ${this.maxInputLength} characters`);
+    const originalByteLength = Buffer.byteLength(raw, "utf8");
+    if (originalByteLength > this.maxInputLength) {
+      errors.push(`Input exceeds maximum length of ${this.maxInputLength} bytes`);
     }
 
     let sanitized = raw;
@@ -114,6 +115,8 @@ export class InputValidator {
     annotations["sanitized"] = sanitized;
     annotations["originalLength"] = raw.length;
     annotations["sanitizedLength"] = sanitized.length;
+    annotations["originalByteLength"] = originalByteLength;
+    annotations["sanitizedByteLength"] = Buffer.byteLength(sanitized, "utf8");
 
     return { passed: errors.length === 0, stage: "syntax", errors, annotations };
   }
