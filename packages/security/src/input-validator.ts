@@ -40,6 +40,11 @@ export interface ValidationStageResult {
   annotations: Record<string, unknown>;
 }
 
+const CONTROL_CHARS_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u0080-\u009F]/gu;
+const UNICODE_FORMAT_CHARS_PATTERN =
+  /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\uFE00-\uFE0F\uFEFF\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}]/gu;
+const BIDI_CONTROL_CHARS_PATTERN = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
+
 export class InputValidator {
   private readonly maxInputLength: number;
   private readonly sanitizeControlChars: boolean;
@@ -103,11 +108,24 @@ export class InputValidator {
 
     let sanitized = raw;
     if (this.sanitizeControlChars) {
-      // Strip null bytes and non-printable ASCII control characters (except \t \n \r)
-      sanitized = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
-      if (sanitized.length !== raw.length) {
+      // Strip control and invisible formatting characters while preserving \t, \n, and \r.
+      const withoutControlChars = sanitized.replace(CONTROL_CHARS_PATTERN, "");
+      if (withoutControlChars !== sanitized) {
         annotations["controlCharsStripped"] = true;
       }
+      sanitized = withoutControlChars;
+
+      const withoutUnicodeFormatChars = sanitized.replace(UNICODE_FORMAT_CHARS_PATTERN, "");
+      if (withoutUnicodeFormatChars !== sanitized) {
+        annotations["unicodeFormatCharsStripped"] = true;
+      }
+      sanitized = withoutUnicodeFormatChars;
+
+      const withoutBidiControls = sanitized.replace(BIDI_CONTROL_CHARS_PATTERN, "");
+      if (withoutBidiControls !== sanitized) {
+        annotations["bidiControlsStripped"] = true;
+      }
+      sanitized = withoutBidiControls;
     }
 
     // Normalise unicode to NFC to prevent homoglyph attacks
