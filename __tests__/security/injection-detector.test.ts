@@ -72,4 +72,19 @@ describe("InjectionDetector", () => {
     const result = await detector.detect("use EVIL_KEYWORD now");
     expect(result.matchedPatterns).toContain("custom_0");
   });
+
+  it("keeps global custom patterns deterministic across repeated detections", async () => {
+    const detector = new InjectionDetector({
+      additionalPatterns: [/EVIL_KEYWORD/gi],
+    });
+
+    const first = await detector.detect("use EVIL_KEYWORD now");
+    const second = await detector.detect("use EVIL_KEYWORD now");
+
+    expect(first.matchedPatterns).toContain("custom_0");
+    expect(second.matchedPatterns).toContain("custom_0");
+    expect(second.detected).toBe(first.detected);
+    expect(second.action).toBe(first.action);
+    expect(second.score).toBe(first.score);
+  });
 });

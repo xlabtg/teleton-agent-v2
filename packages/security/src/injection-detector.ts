@@ -48,6 +48,12 @@ interface NamedPattern {
   pattern: RegExp;
 }
 
+const STATEFUL_PATTERN_FLAGS = /[gy]/g;
+
+function toStatelessPattern(pattern: RegExp): RegExp {
+  return new RegExp(pattern.source, pattern.flags.replace(STATEFUL_PATTERN_FLAGS, ""));
+}
+
 /**
  * Known prompt injection / attack patterns.
  * Updated when new techniques are identified — keep this list minimal and precise
@@ -87,7 +93,10 @@ export class InjectionDetector {
     this.classifier = config.classifier;
     this.patterns = [
       ...BUILTIN_PATTERNS,
-      ...(config.additionalPatterns ?? []).map((p, i) => ({ name: `custom_${i}`, pattern: p })),
+      ...(config.additionalPatterns ?? []).map((p, i) => ({
+        name: `custom_${i}`,
+        pattern: toStatelessPattern(p),
+      })),
     ];
   }
 
