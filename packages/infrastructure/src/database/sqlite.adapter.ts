@@ -175,6 +175,20 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
     return this.rowToEntry(row);
   }
 
+  async list(limit: number = 100): Promise<MemoryEntry[]> {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT * FROM memory_entries
+        ORDER BY created_at DESC
+        LIMIT ?
+      `
+      )
+      .all(limit) as Record<string, unknown>[];
+
+    return rows.map((r) => this.rowToEntry(r));
+  }
+
   async search(query: string, limit: number = 10): Promise<MemoryEntry[]> {
     const rows = this.db
       .prepare(

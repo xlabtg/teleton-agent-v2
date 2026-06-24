@@ -33,6 +33,9 @@ function createMockMemoryRepo(): MemoryRepository {
       return full;
     }),
     findById: vi.fn().mockImplementation(async (id) => store.get(id) ?? null),
+    list: vi
+      .fn()
+      .mockImplementation(async (limit = 100) => Array.from(store.values()).slice(0, limit)),
     search: vi.fn().mockResolvedValue([]),
     searchByEmbedding: vi.fn().mockResolvedValue([]),
     update: vi.fn(),

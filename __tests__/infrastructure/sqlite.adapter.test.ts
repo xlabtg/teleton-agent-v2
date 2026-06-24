@@ -58,6 +58,16 @@ describe("SQLiteMemoryRepository", () => {
     expect(result).toBeNull();
   });
 
+  it("should list entries without using full-text search", async () => {
+    await repo.store(makeEntry({ content: "oldest", createdAt: new Date("2024-01-01T00:00:00Z") }));
+    await repo.store(makeEntry({ content: "newest", createdAt: new Date("2024-01-03T00:00:00Z") }));
+    await repo.store(makeEntry({ content: "middle", createdAt: new Date("2024-01-02T00:00:00Z") }));
+
+    const results = await repo.list(2);
+
+    expect(results.map((entry) => entry.content)).toEqual(["newest", "middle"]);
+  });
+
   it("should persist createdAt and accessedAt timestamps", async () => {
     const created = new Date("2024-03-15T10:00:00Z");
     const accessed = new Date("2024-03-15T11:00:00Z");
