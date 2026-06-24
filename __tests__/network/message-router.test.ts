@@ -7,6 +7,7 @@ import {
 import type { AgentTransport, RouteEntry } from "../../packages/network/src/message-router.js";
 import { createRequestMessage } from "../../packages/network/src/message-schema.js";
 import type { AgentMessage } from "../../packages/network/src/message-schema.js";
+import { MAX_TTL } from "../../packages/network/src/protocol.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,40 @@ describe("MessageRouter", () => {
       const result = await router.route(msg);
 
       expect(result.outcome).toBe("dropped_ttl");
+    });
+
+    it("should drop messages with TTL above MAX_TTL", async () => {
+      const { transport, calls } = makeTransport();
+      const router = makeRouter("agent-a", transport, routeTable);
+
+      const msg = createRequestMessage({
+        source: "agent-a",
+        destination: "agent-b",
+        action: "x",
+        ttl: MAX_TTL + 1,
+      });
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("dropped_ttl");
+      expect(result.reason).toContain("exceeds maximum");
+      expect(calls.length).toBe(0);
+    });
+
+    it("should drop messages that already visited the local agent", async () => {
+      const { transport, calls } = makeTransport();
+      const router = makeRouter("agent-a", transport, routeTable);
+
+      const msg = createRequestMessage({
+        source: "agent-c",
+        destination: "agent-b",
+        action: "x",
+      });
+      msg.routing.path = [{ agentId: "agent-a", timestamp: new Date().toISOString() }];
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("dropped_ttl");
+      expect(result.reason).toContain("Routing loop detected");
+      expect(calls.every((call) => call.agentId !== "agent-b")).toBe(true);
     });
   });
 
