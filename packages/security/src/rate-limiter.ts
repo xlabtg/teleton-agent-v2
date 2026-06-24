@@ -17,6 +17,8 @@ export interface RateLimitWindow {
 export interface RateLimiterConfig {
   /** Rate limit windows to enforce (checked in order). At least one is required. */
   windows: RateLimitWindow[];
+  /** Maximum number of distinct keys retained in memory. Default: 10_000 */
+  maxKeys?: number;
   /** Number of violations within `abuseWindowMs` that trigger a temporary ban. Default: 10 */
   abuseThreshold?: number;
   /** Window for tracking violations (ms). Default: 60_000 (1 min) */
@@ -50,6 +52,7 @@ interface WindowState {
 interface BanState {
   violations: number[]; // timestamps
   bannedUntil?: number;
+  lastSeen: number;
 }
 
 export class RateLimiter {
@@ -59,6 +62,7 @@ export class RateLimiter {
   private readonly banStates = new Map<string, BanState>();
 
   private readonly windows: RateLimitWindow[];
+  private readonly maxKeys: number;
   private readonly abuseThreshold: number;
   private readonly abuseWindowMs: number;
   private readonly banDurationMs: number;
@@ -68,6 +72,10 @@ export class RateLimiter {
       throw new Error("RateLimiter requires at least one window configuration");
     }
     this.windows = config.windows;
+    this.maxKeys = config.maxKeys ?? 10_000;
+    if (this.maxKeys < 1) {
+      throw new Error("RateLimiter maxKeys must be at least 1");
+    }
     this.abuseThreshold = config.abuseThreshold ?? 10;
     this.abuseWindowMs = config.abuseWindowMs ?? 60_000;
     this.banDurationMs = config.banDurationMs ?? 300_000;
@@ -78,9 +86,12 @@ export class RateLimiter {
    * Returns a `RateLimitStatus` — does not throw.
    */
   consume(key: string, now = Date.now()): RateLimitStatus {
+    this.sweep(now);
+
     // Check ban
     const ban = this.banStates.get(key);
     if (ban?.bannedUntil && ban.bannedUntil > now) {
+      ban.lastSeen = now;
       return {
         allowed: false,
         key,
@@ -95,6 +106,7 @@ export class RateLimiter {
     if (!states) {
       states = this.windows.map(() => ({ count: 0, windowStart: now }));
       this.windowStates.set(key, states);
+      this.enforceKeyLimit();
     }
 
     let limitedByWindow: number | undefined;
@@ -180,6 +192,40 @@ export class RateLimiter {
     this.banStates.delete(key);
   }
 
+  /**
+   * Remove expired idle state. This can be called by hosts during low-traffic
+   * periods; consume() also runs it opportunistically.
+   */
+  sweep(now = Date.now()): void {
+    for (const [key, states] of this.windowStates) {
+      if (states.every((state, i) => now - state.windowStart >= this.windows[i].windowMs)) {
+        this.windowStates.delete(key);
+      }
+    }
+
+    for (const [key, ban] of this.banStates) {
+      ban.violations = ban.violations.filter((t) => now - t <= this.abuseWindowMs);
+      const idleMs = now - ban.lastSeen;
+      if (
+        (!ban.bannedUntil || ban.bannedUntil <= now) &&
+        ban.violations.length === 0 &&
+        idleMs >= this.abuseWindowMs
+      ) {
+        this.banStates.delete(key);
+      }
+    }
+  }
+
+  /** Number of keys currently retained for request windows. */
+  getWindowStateSize(): number {
+    return this.windowStates.size;
+  }
+
+  /** Number of keys currently retained for abuse/ban tracking. */
+  getBanStateSize(): number {
+    return this.banStates.size;
+  }
+
   /** Current violation count for a key within the abuse window */
   getViolationCount(key: string, now = Date.now()): number {
     const ban = this.banStates.get(key);
@@ -192,9 +238,11 @@ export class RateLimiter {
   private recordViolation(key: string, now: number): void {
     let ban = this.banStates.get(key);
     if (!ban) {
-      ban = { violations: [] };
+      ban = { violations: [], lastSeen: now };
       this.banStates.set(key, ban);
+      this.enforceKeyLimit();
     }
+    ban.lastSeen = now;
 
     // Purge old violations outside the abuse window
     ban.violations = ban.violations.filter((t) => now - t <= this.abuseWindowMs);
@@ -202,6 +250,27 @@ export class RateLimiter {
 
     if (ban.violations.length >= this.abuseThreshold) {
       ban.bannedUntil = now + this.banDurationMs;
+    }
+  }
+
+  private enforceKeyLimit(): void {
+    while (this.windowStates.size > this.maxKeys) {
+      const oldest = this.windowStates.keys().next().value;
+      if (oldest === undefined) break;
+      this.windowStates.delete(oldest);
+    }
+
+    while (this.banStates.size > this.maxKeys) {
+      let oldestKey: string | undefined;
+      let oldestSeen = Infinity;
+      for (const [key, ban] of this.banStates) {
+        if (ban.lastSeen < oldestSeen) {
+          oldestSeen = ban.lastSeen;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === undefined) break;
+      this.banStates.delete(oldestKey);
     }
   }
 }
