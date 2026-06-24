@@ -111,7 +111,8 @@ export class CircuitBreaker {
   }
 
   /**
-   * Execute `fn` through the circuit breaker with automatic retry.
+   * Execute `fn` through the circuit breaker.
+   * Retries are applied in CLOSED state; HALF_OPEN uses a single probe attempt.
    * Throws `InfrastructureError` if the circuit is OPEN.
    */
   async call<T>(fn: () => Promise<T>): Promise<T> {
@@ -123,6 +124,17 @@ export class CircuitBreaker {
         "Circuit breaker is OPEN. Requests are blocked until recovery timeout elapses.",
         new Error("Circuit open")
       );
+    }
+
+    if (this.state === "HALF_OPEN") {
+      try {
+        const result = await fn();
+        this._onSuccess();
+        return result;
+      } catch (err) {
+        this._onFailure();
+        throw err;
+      }
     }
 
     let lastError: unknown;
