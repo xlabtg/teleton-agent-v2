@@ -33,6 +33,7 @@ export interface VectorStore {
 /**
  * Computes cosine similarity between two vectors.
  * Returns a value between -1 and 1, where 1 means identical direction.
+ * Returns NaN when either vector has zero magnitude because similarity is undefined.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
@@ -50,7 +51,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   }
 
   const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
-  if (magnitude === 0) return 0;
+  if (magnitude === 0) return Number.NaN;
 
   return dotProduct / magnitude;
 }
@@ -66,7 +67,7 @@ export class InMemoryVectorStore implements VectorStore {
 
   constructor(options: VectorStoreOptions) {
     this.dimensions = options.dimensions;
-    this.defaultThreshold = options.similarityThreshold ?? 0.0;
+    this.defaultThreshold = options.similarityThreshold ?? Number.NEGATIVE_INFINITY;
   }
 
   async insert(entry: VectorEntry): Promise<void> {
@@ -98,7 +99,7 @@ export class InMemoryVectorStore implements VectorStore {
 
     for (const entry of this.entries.values()) {
       const score = cosineSimilarity(query, entry.embedding);
-      if (score >= minScore) {
+      if (Number.isFinite(score) && score >= minScore) {
         results.push({
           id: entry.id,
           score,
