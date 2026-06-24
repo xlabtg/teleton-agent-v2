@@ -127,6 +127,24 @@ describe("CircuitBreaker", () => {
       expect(cb.currentState).toBe("CLOSED");
       vi.useRealTimers();
     });
+
+    it("should run exactly one trial request without retries in HALF_OPEN", async () => {
+      const cb = new CircuitBreaker({
+        maxRetries: 3,
+        retryBaseDelayMs: 0,
+      });
+      const internals = cb as unknown as { state: "CLOSED" | "OPEN" | "HALF_OPEN" };
+      internals.state = "HALF_OPEN";
+
+      const probe = vi.fn(async () => {
+        throw new Error("probe failed");
+      });
+
+      await expect(cb.call(probe)).rejects.toThrow("probe failed");
+
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(internals.state).toBe("OPEN");
+    });
   });
 
   describe("reset()", () => {
