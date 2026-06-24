@@ -17,6 +17,7 @@ import {
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
 import { createServer, startServer } from "@teleton/api/server.js";
 import { appConfigSchema } from "../../../configs/config.schema.js";
+import { createAgentServerConfig } from "./server-config.js";
 
 export class TeletonApp {
   private running = false;
@@ -60,22 +61,7 @@ export class TeletonApp {
     console.log("✅ Agent runtime created");
 
     // 5. Start API server
-    const serverConfig = {
-      port: config.api.port,
-      host: config.api.host,
-      auth: {
-        jwtSecret: config.security.jwtSecret,
-        tokenExpiry: 3600,
-        refreshTokenExpiry: 604800,
-      },
-      security: {
-        rateLimitWindow: config.security.rateLimitWindow,
-        rateLimitMax: config.security.rateLimitMax,
-        corsOrigins: config.api.cors ?? [],
-      },
-      tls: config.api.tls,
-    };
-
+    const serverConfig = createAgentServerConfig(config);
     const app = createServer(serverConfig);
     await startServer(app, serverConfig);
 

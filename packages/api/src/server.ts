@@ -44,6 +44,19 @@ export interface ServerConfig {
   tls?: TlsConfig;
 }
 
+export function deriveCsrfConfig(
+  config: Pick<ServerConfig, "csrf" | "tls">,
+  runtimeEnv = process.env.NODE_ENV
+): CsrfConfig {
+  const secureCookie =
+    Boolean(config.csrf?.secureCookie) || Boolean(config.tls) || runtimeEnv === "production";
+
+  return {
+    ...(config.csrf ?? {}),
+    secureCookie,
+  };
+}
+
 interface ListeningServer {
   listen(port: number, host: string, callback: () => void): unknown;
   once(event: "error", listener: (error: Error) => void): this;
@@ -158,6 +171,7 @@ export async function startServer(
 
 export function createServer(config: ServerConfig): Hono {
   const app = new Hono();
+  const csrfConfig = deriveCsrfConfig(config);
 
   // Global middleware
   app.use("*", requestIdMiddleware());
@@ -169,14 +183,14 @@ export function createServer(config: ServerConfig): Hono {
   // to prevent brute-force attacks and credential stuffing.
   app.use("/api/auth/*", createAuthRateLimitMiddleware(config.authRateLimit));
   app.use("/api/*", createAuthMiddleware(config.auth));
-  app.use("/api/*", createCsrfMiddleware(config.csrf));
+  app.use("/api/*", createCsrfMiddleware(csrfConfig));
 
   // Error handler
   app.onError(errorHandler);
 
   // Routes
   app.route("/", createHealthRoutes());
-  app.route("/api/auth", createAuthRoutes(config.auth, config.csrf));
+  app.route("/api/auth", createAuthRoutes(config.auth, csrfConfig));
   app.route("/api/docs", createDocsRoutes());
   app.route("/api/agents", createAgentRoutes());
 
