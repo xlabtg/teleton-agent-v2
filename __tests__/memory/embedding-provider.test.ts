@@ -68,6 +68,59 @@ describe("CachedEmbeddingProvider", () => {
     expect(delegate.embed).toHaveBeenCalledWith("a");
   });
 
+  it("should refresh recency on embed cache hits", async () => {
+    const small = new CachedEmbeddingProvider(delegate, { maxCacheSize: 2 });
+
+    await small.embed("a");
+    await small.embed("b");
+    await small.embed("a");
+    await small.embed("c");
+
+    (delegate.embed as ReturnType<typeof vi.fn>).mockClear();
+    await small.embed("a");
+    expect(delegate.embed).not.toHaveBeenCalled();
+
+    await small.embed("b");
+    expect(delegate.embed).toHaveBeenCalledWith("b");
+  });
+
+  it("should refresh recency on embedBatch cache hits", async () => {
+    const small = new CachedEmbeddingProvider(delegate, { maxCacheSize: 2 });
+
+    await small.embed("a");
+    await small.embed("b");
+    await small.embedBatch(["a"]);
+    await small.embed("c");
+
+    (delegate.embed as ReturnType<typeof vi.fn>).mockClear();
+    await small.embed("a");
+    expect(delegate.embed).not.toHaveBeenCalled();
+
+    await small.embed("b");
+    expect(delegate.embed).toHaveBeenCalledWith("b");
+  });
+
+  it("should reject wrong-sized embeddings from embed", async () => {
+    (delegate.embed as ReturnType<typeof vi.fn>).mockResolvedValue([1, 2]);
+
+    await expect(cached.embed("bad")).rejects.toThrow(
+      'Embedding dimension mismatch for text "bad": expected 3, received 2'
+    );
+    expect(cached.cacheSize).toBe(0);
+  });
+
+  it("should reject wrong-sized embeddings from embedBatch", async () => {
+    (delegate.embedBatch as ReturnType<typeof vi.fn>).mockResolvedValue([
+      [1, 2, 3],
+      [4, 5],
+    ]);
+
+    await expect(cached.embedBatch(["ok", "bad"])).rejects.toThrow(
+      'Embedding dimension mismatch for text "bad": expected 3, received 2'
+    );
+    expect(cached.cacheSize).toBe(0);
+  });
+
   it("should clear cache", async () => {
     await cached.embed("hello");
     expect(cached.cacheSize).toBe(1);
