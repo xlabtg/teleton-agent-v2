@@ -4,7 +4,7 @@
  */
 
 import type { Context } from "hono";
-import { DomainError } from "@teleton/core/errors/domain-errors.js";
+import { DomainError, ValidationError } from "@teleton/core/errors/domain-errors.js";
 
 export interface ErrorResponse {
   error: {
@@ -26,6 +26,10 @@ export function errorHandler(err: Error, ctx: Context): Response {
       },
       requestId,
     };
+
+    if (err instanceof ValidationError) {
+      body.error.details = err.details;
+    }
 
     return ctx.json(body, err.statusCode as 400 | 401 | 403 | 404 | 429 | 500);
   }
