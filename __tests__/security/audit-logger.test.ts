@@ -92,5 +92,72 @@ describe("AuditLogger", () => {
     errLogger.logSuccess(ACTOR, "test", "system");
     await flush();
     expect(onError).toHaveBeenCalledOnce();
+    expect(errLogger.failureCount).toBe(1);
+  });
+
+  it("logs store failures by default instead of swallowing them silently", async () => {
+    const broken = {
+      append: vi.fn().mockRejectedValue(new Error("store failure")),
+      getAll: vi.fn(),
+      verifyIntegrity: vi.fn(),
+      purgeExpired: vi.fn(),
+      size: 0,
+    } as unknown as AuditStore;
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const errLogger = new AuditLogger(broken);
+
+    try {
+      errLogger.logSuccess(ACTOR, "test", "system");
+      await flush();
+
+      expect(consoleError).toHaveBeenCalledOnce();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Audit log store write failed",
+        expect.objectContaining({
+          action: "test",
+          category: "system",
+          err: expect.any(Error),
+        })
+      );
+      expect(errLogger.failureCount).toBe(1);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("logAndWait resolves with the stored event after append succeeds", async () => {
+    const event = await logger.logAndWait(ACTOR, "durable.ok", "system", "success", "info");
+
+    expect(event?.action).toBe("durable.ok");
+    expect(store.getAll()).toHaveLength(1);
+    expect(store.getAll()[0]).toMatchObject({
+      id: event?.id,
+      action: "durable.ok",
+      outcome: "success",
+    });
+  });
+
+  it("logAndWait routes store failures to onError and rethrows", async () => {
+    const error = new Error("store failure");
+    const broken = {
+      append: vi.fn().mockRejectedValue(error),
+      getAll: vi.fn(),
+      verifyIntegrity: vi.fn(),
+      purgeExpired: vi.fn(),
+      size: 0,
+    } as unknown as AuditStore;
+    const onError = vi.fn();
+    const errLogger = new AuditLogger(broken, { onError });
+
+    await expect(
+      errLogger.logAndWait(ACTOR, "durable.fail", "system", "failure", "error")
+    ).rejects.toThrow("store failure");
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({ action: "durable.fail" })
+    );
+    expect(errLogger.failureCount).toBe(1);
   });
 });
