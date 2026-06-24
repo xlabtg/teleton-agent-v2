@@ -51,7 +51,6 @@ const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/api/sessions/*": ["admin", "user", "readonly"],
   "/api/config/*": ["admin"],
   "/api/plugins/*": ["admin"],
-  "/api/health": ["admin", "user", "plugin", "readonly"],
 };
 
 function escapeRegexLiteral(value: string): string {
@@ -138,14 +137,20 @@ function hasPermission(role: UserRole, path: string): boolean {
   return false;
 }
 
+function isDocsPath(path: string): boolean {
+  return path === "/api/docs" || path.startsWith("/api/docs/");
+}
+
 export function createAuthMiddleware(config: AuthConfig) {
   return async (ctx: Context, next: Next) => {
+    const path = ctx.req.path;
+
     // Skip auth for health, public, auth, and docs endpoints
     if (
-      ctx.req.path === "/api/health" ||
-      ctx.req.path === "/" ||
-      ctx.req.path.startsWith("/api/auth/") ||
-      ctx.req.path.startsWith("/api/docs")
+      path === "/api/health" ||
+      path === "/" ||
+      path.startsWith("/api/auth/") ||
+      isDocsPath(path)
     ) {
       return next();
     }
