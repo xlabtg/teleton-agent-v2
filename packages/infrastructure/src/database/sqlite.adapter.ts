@@ -213,7 +213,7 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
     const rows = this.db
       .prepare(
         `
-        SELECT me.* FROM memory_entries me
+        SELECT me.*, me.rowid FROM memory_entries me
         JOIN memory_entries_fts fts ON me.rowid = fts.rowid
         WHERE memory_entries_fts MATCH ?
         ORDER BY rank
@@ -221,6 +221,8 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
       `
       )
       .all(query, limit) as Record<string, unknown>[];
+
+    this.refreshAccessedAt(rows);
 
     return rows.map((r) => this.rowToEntry(r));
   }
@@ -241,6 +243,8 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
       `
       )
       .all(serializeEmbedding(embedding), limit) as Record<string, unknown>[];
+
+    this.refreshAccessedAt(rows);
 
     return rows.map((r) => this.rowToEntry(r, { includeVectorScore: true }));
   }
@@ -338,6 +342,22 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
       tags: JSON.parse((row.tags as string) || "[]") as string[],
       ...(vectorScore !== undefined ? { score: vectorScore, vectorScore } : {}),
     };
+  }
+
+  private refreshAccessedAt(rows: Record<string, unknown>[]): void {
+    if (rows.length === 0) return;
+
+    const accessedAt = new Date().toISOString();
+    const update = this.db.prepare(`UPDATE memory_entries SET accessed_at = ? WHERE rowid = ?`);
+
+    const transaction = this.db.transaction(() => {
+      for (const row of rows) {
+        update.run(accessedAt, row.rowid);
+        row.accessed_at = accessedAt;
+      }
+    });
+
+    transaction();
   }
 }
 

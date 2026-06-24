@@ -112,6 +112,20 @@ describe("SQLiteMemoryRepository", () => {
     expect(results.length).toBeLessThanOrEqual(3);
   });
 
+  it("should refresh accessedAt for entries returned by full-text search", async () => {
+    const oldAccessedAt = new Date("2024-01-01T00:00:00Z");
+    const entry = await repo.store(
+      makeEntry({ content: "refresh access timestamp keyword", accessedAt: oldAccessedAt })
+    );
+
+    const results = await repo.search("refresh access timestamp");
+    const found = await repo.findById(entry.id);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].accessedAt.getTime()).toBeGreaterThan(oldAccessedAt.getTime());
+    expect(found!.accessedAt.getTime()).toBeGreaterThan(oldAccessedAt.getTime());
+  });
+
   // -- searchByEmbedding (sqlite-vec) ----------------------------------------
 
   it("should find entries by vector similarity", async () => {
@@ -144,6 +158,24 @@ describe("SQLiteMemoryRepository", () => {
 
     const results = await repo.searchByEmbedding([0.5, 0.5], 10);
     expect(results.every((r) => r.content !== "no embedding")).toBe(true);
+  });
+
+  it("should refresh accessedAt for entries returned by vector search", async () => {
+    const oldAccessedAt = new Date("2024-01-01T00:00:00Z");
+    const entry = await repo.store(
+      makeEntry({
+        content: "refresh vector access timestamp",
+        accessedAt: oldAccessedAt,
+        embedding: [1, 0, 0],
+      })
+    );
+
+    const results = await repo.searchByEmbedding([1, 0, 0], 5);
+    const found = await repo.findById(entry.id);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].accessedAt.getTime()).toBeGreaterThan(oldAccessedAt.getTime());
+    expect(found!.accessedAt.getTime()).toBeGreaterThan(oldAccessedAt.getTime());
   });
 
   it("should reject embedding dimension changes without dropping existing vectors", async () => {
