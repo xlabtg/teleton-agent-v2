@@ -120,21 +120,31 @@ function redactMetadataValue(value: unknown, sensitiveKeys: string[]): unknown {
     return value.map((item) => redactMetadataValue(item, sensitiveKeys));
   }
 
-  if (isPlainObject(value)) {
+  if (isMetadataObject(value)) {
     return redactMetadataObject(value, sensitiveKeys);
   }
 
-  return value;
+  return cloneMetadataValue(value);
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+function isMetadataObject(value: unknown): value is Record<string, unknown> {
   return (
-    typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype
+    typeof value === "object" &&
+    value !== null &&
+    Object.prototype.toString.call(value) === "[object Object]"
   );
 }
 
 function isSensitiveKey(key: string, sensitiveKeys: string[]): boolean {
   return sensitiveKeys.some((s) => key.toLowerCase().includes(s.toLowerCase()));
+}
+
+function cloneMetadataValue(value: unknown): unknown {
+  if (typeof value === "object" && value !== null) {
+    return structuredClone(value);
+  }
+
+  return value;
 }
 
 export const DEFAULT_SENSITIVE_KEYS: string[] = [

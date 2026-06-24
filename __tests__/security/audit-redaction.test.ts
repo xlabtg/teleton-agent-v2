@@ -193,4 +193,14 @@ describe("redactSensitiveFields", () => {
       },
     });
   });
+
+  it("deep-clones retained non-plain metadata values", () => {
+    const createdAt = new Date("2026-06-24T10:00:00.000Z");
+    const event = makeEvent({ createdAt });
+
+    const result = redactSensitiveFields(event);
+    createdAt.setUTCFullYear(2030);
+
+    expect(result.metadata!["createdAt"]).toEqual(new Date("2026-06-24T10:00:00.000Z"));
+  });
 });

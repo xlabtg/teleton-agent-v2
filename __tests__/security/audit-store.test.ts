@@ -109,6 +109,17 @@ describe("AuditStore", () => {
     expect(await store.verifyIntegrity()).toBe(true);
   });
 
+  it("does not share retained non-plain metadata values with the caller", async () => {
+    const createdAt = new Date("2026-06-24T10:00:00.000Z");
+    const event = makeEvent({ metadata: { createdAt } });
+
+    await store.append(event);
+    createdAt.setUTCFullYear(2030);
+
+    expect(store.getAll()[0].metadata?.["createdAt"]).toEqual(new Date("2026-06-24T10:00:00.000Z"));
+    expect(await store.verifyIntegrity()).toBe(true);
+  });
+
   it("enforces maxEvents cap by dropping oldest events", async () => {
     const capped = new AuditStore({ maxEvents: 3 });
     for (let i = 0; i < 5; i++) {
