@@ -8,6 +8,7 @@ import type { Context, Next } from "hono";
 import { AuthenticationError, ForbiddenError } from "@teleton/core/errors/domain-errors.js";
 
 export type UserRole = "admin" | "user" | "plugin" | "readonly";
+export type TokenType = "access" | "refresh";
 
 export interface AuthConfig {
   jwtSecret: string;
@@ -18,9 +19,13 @@ export interface AuthConfig {
 export interface TokenPayload {
   sub: string;
   role: UserRole;
+  type: TokenType;
   iat: number;
   exp: number;
 }
+
+const USER_ROLES: readonly UserRole[] = ["admin", "user", "plugin", "readonly"];
+const TOKEN_TYPES: readonly TokenType[] = ["access", "refresh"];
 
 /**
  * Route permission map: path pattern -> allowed roles
@@ -57,6 +62,34 @@ const ROUTE_PERMISSION_MATCHERS = Object.entries(ROUTE_PERMISSIONS).map(
   })
 );
 
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && USER_ROLES.includes(value as UserRole);
+}
+
+function isTokenType(value: unknown): value is TokenType {
+  return typeof value === "string" && TOKEN_TYPES.includes(value as TokenType);
+}
+
+function parseTokenPayload(payload: jose.JWTPayload): TokenPayload {
+  if (
+    typeof payload.sub !== "string" ||
+    !isUserRole(payload.role) ||
+    !isTokenType(payload.type) ||
+    typeof payload.iat !== "number" ||
+    typeof payload.exp !== "number"
+  ) {
+    throw new AuthenticationError("Invalid token");
+  }
+
+  return {
+    sub: payload.sub,
+    role: payload.role,
+    type: payload.type,
+    iat: payload.iat,
+    exp: payload.exp,
+  };
+}
+
 /**
  * Verifies a JWT token's signature and returns its payload.
  * Uses jose to cryptographically verify the HMAC-SHA256 signature.
@@ -67,10 +100,17 @@ async function decodeToken(token: string, secret: string): Promise<TokenPayload>
     const { payload } = await jose.jwtVerify(token, jwtSecret, {
       algorithms: ["HS256", "HS384", "HS512"],
     });
-    return payload as unknown as TokenPayload;
+    const tokenPayload = parseTokenPayload(payload);
+    if (tokenPayload.type !== "access") {
+      throw new AuthenticationError("Invalid token");
+    }
+    return tokenPayload;
   } catch (error) {
     if (error instanceof jose.errors.JWTExpired) {
       throw new AuthenticationError("Token expired");
+    }
+    if (error instanceof AuthenticationError) {
+      throw error;
     }
     throw new AuthenticationError("Invalid token");
   }

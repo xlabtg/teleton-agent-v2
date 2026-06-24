@@ -6,7 +6,12 @@
 import * as jose from "jose";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AuthConfig } from "../middleware/auth.middleware.js";
+import type {
+  AuthConfig,
+  TokenPayload,
+  TokenType,
+  UserRole,
+} from "../middleware/auth.middleware.js";
 import {
   generateCsrfToken,
   setCsrfCookie,
@@ -22,18 +27,50 @@ const RefreshSchema = z.object({
   refreshToken: z.string().min(1).max(2048),
 });
 
+const USER_ROLES: readonly UserRole[] = ["admin", "user", "plugin", "readonly"];
+const TOKEN_TYPES: readonly TokenType[] = ["access", "refresh"];
+
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && USER_ROLES.includes(value as UserRole);
+}
+
+function isTokenType(value: unknown): value is TokenType {
+  return typeof value === "string" && TOKEN_TYPES.includes(value as TokenType);
+}
+
+function parseTokenPayload(payload: jose.JWTPayload): TokenPayload | null {
+  if (
+    typeof payload.sub !== "string" ||
+    !isUserRole(payload.role) ||
+    !isTokenType(payload.type) ||
+    typeof payload.iat !== "number" ||
+    typeof payload.exp !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    sub: payload.sub,
+    role: payload.role,
+    type: payload.type,
+    iat: payload.iat,
+    exp: payload.exp,
+  };
+}
+
 /**
  * Creates a signed JWT using HMAC-SHA256.
  */
 async function createToken(
   sub: string,
-  role: string,
+  role: UserRole,
+  type: TokenType,
   secret: string,
   expirySeconds: number
 ): Promise<string> {
   const jwtSecret = new TextEncoder().encode(secret);
   const now = Math.floor(Date.now() / 1000);
-  return new jose.SignJWT({ sub, role, iat: now })
+  return new jose.SignJWT({ sub, role, type, iat: now })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(now + expirySeconds)
     .sign(jwtSecret);
@@ -85,12 +122,13 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
     const { username, password: _password } = result.data;
 
     // TODO: Replace with real user store lookup and password hashing
-    const role = username === "admin" ? "admin" : "user";
+    const role: UserRole = username === "admin" ? "admin" : "user";
 
-    const token = await createToken(username, role, config.jwtSecret, config.tokenExpiry);
+    const token = await createToken(username, role, "access", config.jwtSecret, config.tokenExpiry);
     const refreshToken = await createToken(
       username,
       role,
+      "refresh",
       config.jwtSecret,
       config.refreshTokenExpiry
     );
@@ -127,12 +165,11 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
       const { payload } = await jose.jwtVerify(token, jwtSecret, {
         algorithms: ["HS256", "HS384", "HS512"],
       });
-      const { sub, role, iat, exp } = payload as {
-        sub: string;
-        role: string;
-        iat: number;
-        exp: number;
-      };
+      const tokenPayload = parseTokenPayload(payload);
+      if (!tokenPayload || tokenPayload.type !== "access") {
+        return ctx.json({ error: { code: "AUTHENTICATION_ERROR", message: "Invalid token" } }, 401);
+      }
+      const { sub, role, iat, exp } = tokenPayload;
       return ctx.json({ user: { sub, role, iat, exp } });
     } catch (error) {
       if (error instanceof jose.errors.JWTExpired) {
@@ -181,8 +218,20 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
       const { payload } = await jose.jwtVerify(refreshToken, jwtSecret, {
         algorithms: ["HS256", "HS384", "HS512"],
       });
-      const { sub, role } = payload as { sub: string; role: string };
-      const newToken = await createToken(sub, role, config.jwtSecret, config.tokenExpiry);
+      const tokenPayload = parseTokenPayload(payload);
+      if (!tokenPayload || tokenPayload.type !== "refresh") {
+        return ctx.json(
+          { error: { code: "AUTHENTICATION_ERROR", message: "Invalid refresh token" } },
+          401
+        );
+      }
+      const newToken = await createToken(
+        tokenPayload.sub,
+        tokenPayload.role,
+        "access",
+        config.jwtSecret,
+        config.tokenExpiry
+      );
 
       return ctx.json({
         token: newToken,

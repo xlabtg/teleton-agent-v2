@@ -36,7 +36,7 @@ function buildTestApp() {
 async function createTestToken(role: UserRole, sub = `${role}-user`): Promise<string> {
   const jwtSecret = new TextEncoder().encode(TEST_AUTH_CONFIG.jwtSecret);
   const now = Math.floor(Date.now() / 1000);
-  return new jose.SignJWT({ sub, role, iat: now })
+  return new jose.SignJWT({ sub, role, type: "access", iat: now })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(now + TEST_AUTH_CONFIG.tokenExpiry)
     .sign(jwtSecret);
@@ -75,9 +75,11 @@ describe("Auth Routes", () => {
       const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as {
         sub: string;
         role: string;
+        type: string;
       };
       expect(payload.sub).toBe("admin");
       expect(payload.role).toBe("admin");
+      expect(payload.type).toBe("access");
     });
 
     it("should embed user role for non-admin username", async () => {
@@ -93,9 +95,30 @@ describe("Auth Routes", () => {
       const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString()) as {
         sub: string;
         role: string;
+        type: string;
       };
       expect(payload.sub).toBe("alice");
       expect(payload.role).toBe("user");
+      expect(payload.type).toBe("access");
+    });
+
+    it("should distinguish access and refresh tokens by type claim", async () => {
+      const res = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "test" }),
+      });
+
+      const body = (await res.json()) as Record<string, string>;
+      const accessPayload = JSON.parse(
+        Buffer.from(body.token.split(".")[1], "base64url").toString()
+      ) as { type: string };
+      const refreshPayload = JSON.parse(
+        Buffer.from(body.refreshToken.split(".")[1], "base64url").toString()
+      ) as { type: string };
+
+      expect(accessPayload.type).toBe("access");
+      expect(refreshPayload.type).toBe("refresh");
     });
 
     it("should return 400 when username is missing", async () => {
@@ -165,6 +188,23 @@ describe("Auth Routes", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: "not.a.valid.token" }),
+      });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 when an access token is used as a refresh token", async () => {
+      const loginRes = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "test" }),
+      });
+      const { token } = (await loginRes.json()) as Record<string, string>;
+
+      const res = await router.request("/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: token }),
       });
 
       expect(res.status).toBe(401);
@@ -276,6 +316,23 @@ describe("Auth Routes", () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(res.status).toBe(200);
+    });
+
+    it("should reject a refresh token on a protected route", async () => {
+      const loginRes = await app.request("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "test" }),
+      });
+      const { refreshToken } = (await loginRes.json()) as Record<string, string>;
+
+      const res = await app.request("/api/agents", {
+        headers: { Authorization: `Bearer ${refreshToken}` },
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as Record<string, Record<string, unknown>>;
+      expect(body.error.code).toBe("AUTHENTICATION_ERROR");
     });
 
     it.each(["readonly", "plugin"] as const)(
