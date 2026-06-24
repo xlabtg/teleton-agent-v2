@@ -206,4 +206,51 @@ describe("InMemoryGraphStore", () => {
     expect(store.nodeCount()).toBe(0);
     expect(store.edgeCount()).toBe(0);
   });
+
+  it("should evict the oldest nodes and their edges when maxNodes is reached", () => {
+    store = new InMemoryGraphStore({ maxNodes: 2 });
+
+    const a = store.addNode({ type: "entity", label: "A", properties: {} });
+    const b = store.addNode({ type: "entity", label: "B", properties: {} });
+    store.addEdge({
+      sourceId: a.id,
+      targetId: b.id,
+      type: "related_to",
+      weight: 1,
+      properties: {},
+    });
+    const c = store.addNode({ type: "entity", label: "C", properties: {} });
+
+    expect(store.getNode(a.id)).toBeUndefined();
+    expect(store.getNode(b.id)).toBeDefined();
+    expect(store.getNode(c.id)).toBeDefined();
+    expect(store.nodeCount()).toBe(2);
+    expect(store.edgeCount()).toBe(0);
+  });
+
+  it("should evict the oldest edges when maxEdges is reached", () => {
+    store = new InMemoryGraphStore({ maxEdges: 1 });
+    const a = store.addNode({ type: "entity", label: "A", properties: {} });
+    const b = store.addNode({ type: "entity", label: "B", properties: {} });
+    const c = store.addNode({ type: "entity", label: "C", properties: {} });
+
+    const first = store.addEdge({
+      sourceId: a.id,
+      targetId: b.id,
+      type: "related_to",
+      weight: 1,
+      properties: {},
+    });
+    const second = store.addEdge({
+      sourceId: b.id,
+      targetId: c.id,
+      type: "related_to",
+      weight: 1,
+      properties: {},
+    });
+
+    expect(store.edgeCount()).toBe(1);
+    expect(store.removeEdge(first.id)).toBe(false);
+    expect(store.removeEdge(second.id)).toBe(true);
+  });
 });

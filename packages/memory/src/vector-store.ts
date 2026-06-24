@@ -19,6 +19,7 @@ export interface VectorSearchResult {
 export interface VectorStoreOptions {
   dimensions: number;
   similarityThreshold?: number;
+  maxEntries?: number;
 }
 
 export interface VectorStore {
@@ -64,10 +65,18 @@ export class InMemoryVectorStore implements VectorStore {
   private readonly entries = new Map<string, VectorEntry>();
   private readonly dimensions: number;
   private readonly defaultThreshold: number;
+  private readonly maxEntries: number;
 
   constructor(options: VectorStoreOptions) {
     this.dimensions = options.dimensions;
     this.defaultThreshold = options.similarityThreshold ?? Number.NEGATIVE_INFINITY;
+    this.maxEntries = options.maxEntries ?? Number.POSITIVE_INFINITY;
+    if (
+      this.maxEntries !== Number.POSITIVE_INFINITY &&
+      (!Number.isInteger(this.maxEntries) || this.maxEntries < 1)
+    ) {
+      throw new Error("maxEntries must be a positive integer");
+    }
   }
 
   async insert(entry: VectorEntry): Promise<void> {
@@ -76,7 +85,11 @@ export class InMemoryVectorStore implements VectorStore {
         `Embedding dimension mismatch: expected ${this.dimensions}, got ${entry.embedding.length}`
       );
     }
+    if (this.entries.has(entry.id)) {
+      this.entries.delete(entry.id);
+    }
     this.entries.set(entry.id, entry);
+    this.evictOldestEntries();
   }
 
   async insertBatch(entries: VectorEntry[]): Promise<void> {
@@ -122,5 +135,13 @@ export class InMemoryVectorStore implements VectorStore {
 
   clear(): void {
     this.entries.clear();
+  }
+
+  private evictOldestEntries(): void {
+    while (this.entries.size > this.maxEntries) {
+      const oldestId = this.entries.keys().next().value as string | undefined;
+      if (oldestId === undefined) return;
+      this.entries.delete(oldestId);
+    }
   }
 }

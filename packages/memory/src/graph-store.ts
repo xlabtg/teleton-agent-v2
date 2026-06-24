@@ -56,6 +56,11 @@ export interface GraphStore {
   clear(): void;
 }
 
+export interface GraphStoreOptions {
+  maxNodes?: number;
+  maxEdges?: number;
+}
+
 /**
  * In-memory graph store implementation.
  * Suitable for development; can be replaced with a persistent backend.
@@ -65,6 +70,15 @@ export class InMemoryGraphStore implements GraphStore {
   private readonly edges = new Map<string, GraphEdge>();
   private readonly outEdges = new Map<string, Set<string>>(); // nodeId -> edgeIds
   private readonly inEdges = new Map<string, Set<string>>(); // nodeId -> edgeIds
+  private readonly maxNodes: number;
+  private readonly maxEdges: number;
+
+  constructor(options: GraphStoreOptions = {}) {
+    this.maxNodes = options.maxNodes ?? Number.POSITIVE_INFINITY;
+    this.maxEdges = options.maxEdges ?? Number.POSITIVE_INFINITY;
+    validateMaxSize(this.maxNodes, "maxNodes");
+    validateMaxSize(this.maxEdges, "maxEdges");
+  }
 
   addNode(input: Omit<GraphNode, "id" | "createdAt" | "accessedAt">): GraphNode {
     const node: GraphNode = {
@@ -76,6 +90,7 @@ export class InMemoryGraphStore implements GraphStore {
     this.nodes.set(node.id, node);
     this.outEdges.set(node.id, new Set());
     this.inEdges.set(node.id, new Set());
+    this.evictOldestNodes();
     return node;
   }
 
@@ -159,6 +174,7 @@ export class InMemoryGraphStore implements GraphStore {
     this.edges.set(edge.id, edge);
     this.outEdges.get(edge.sourceId)!.add(edge.id);
     this.inEdges.get(edge.targetId)!.add(edge.id);
+    this.evictOldestEdges();
     return edge;
   }
 
@@ -233,5 +249,28 @@ export class InMemoryGraphStore implements GraphStore {
     this.edges.clear();
     this.outEdges.clear();
     this.inEdges.clear();
+  }
+
+  private evictOldestNodes(): void {
+    while (this.nodes.size > this.maxNodes) {
+      const oldestNodeId = this.nodes.keys().next().value as string | undefined;
+      if (oldestNodeId === undefined) return;
+      this.removeNode(oldestNodeId);
+    }
+  }
+
+  private evictOldestEdges(): void {
+    while (this.edges.size > this.maxEdges) {
+      const oldestEdgeId = this.edges.keys().next().value as string | undefined;
+      if (oldestEdgeId === undefined) return;
+      this.removeEdge(oldestEdgeId);
+    }
+  }
+}
+
+function validateMaxSize(value: number, name: string): void {
+  if (value === Number.POSITIVE_INFINITY) return;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer`);
   }
 }
