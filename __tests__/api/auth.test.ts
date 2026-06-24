@@ -19,6 +19,20 @@ const TEST_AUTH_CONFIG = {
   jwtSecret: "test-secret-key",
   tokenExpiry: 3600,
   refreshTokenExpiry: 604800,
+  userStore: {
+    findByUsername(username: string) {
+      if (username !== "admin" && username !== "alice") {
+        return null;
+      }
+
+      return {
+        username,
+        role: username === "admin" ? ("admin" as const) : ("user" as const),
+        passwordHash:
+          "scrypt$16384$8$1$64$dGVzdC11c2VyLXNhbHQtdjE$Dt11kfNFhBIumZljaSG_p8M0sf7RN1oaAgHDuejOXH5dcO_IZOclLQCFwyJafBNKE42PBBJ__ip8GlEjRXtc3Q",
+      };
+    },
+  },
 };
 
 /** Build a minimal app with auth middleware + routes for integration testing */
@@ -50,7 +64,7 @@ describe("Auth Routes", () => {
       const res = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
 
       expect(res.status).toBe(200);
@@ -61,11 +75,11 @@ describe("Auth Routes", () => {
       expect(body.tokenType).toBe("Bearer");
     });
 
-    it("should embed admin role for admin username", async () => {
+    it("should embed role from the authenticated user record", async () => {
       const res = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "any" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
 
       const body = (await res.json()) as Record<string, unknown>;
@@ -82,11 +96,88 @@ describe("Auth Routes", () => {
       expect(payload.type).toBe("access");
     });
 
+    it("should return 401 when the password does not match the stored hash", async () => {
+      const res = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "any" }),
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as Record<string, Record<string, unknown>>;
+      expect(body.error.code).toBe("AUTHENTICATION_ERROR");
+    });
+
+    it("should return 401 when the user is not found", async () => {
+      const res = await router.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "unknown", password: "correct-password" }),
+      });
+
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as Record<string, Record<string, unknown>>;
+      expect(body.error.code).toBe("AUTHENTICATION_ERROR");
+    });
+
+    it("should not derive role from the raw username", async () => {
+      const customRouter = createAuthRoutes({
+        ...TEST_AUTH_CONFIG,
+        userStore: {
+          findByUsername(username: string) {
+            if (username !== "admin") {
+              return null;
+            }
+
+            return {
+              username,
+              role: "readonly" as const,
+              passwordHash:
+                "scrypt$16384$8$1$64$dGVzdC11c2VyLXNhbHQtdjE$Dt11kfNFhBIumZljaSG_p8M0sf7RN1oaAgHDuejOXH5dcO_IZOclLQCFwyJafBNKE42PBBJ__ip8GlEjRXtc3Q",
+            };
+          },
+        },
+      });
+
+      const res = await customRouter.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      const token = body.token as string;
+      const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()) as {
+        role: string;
+      };
+      expect(payload.role).toBe("readonly");
+    });
+
+    it("should return 501 in production when no user store is configured", async () => {
+      const productionRouter = createAuthRoutes({
+        jwtSecret: "test-secret-key",
+        tokenExpiry: 3600,
+        refreshTokenExpiry: 604800,
+        runtimeEnv: "production",
+      });
+
+      const res = await productionRouter.request("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
+      });
+
+      expect(res.status).toBe(501);
+      const body = (await res.json()) as Record<string, Record<string, unknown>>;
+      expect(body.error.code).toBe("AUTH_NOT_CONFIGURED");
+    });
+
     it("should embed user role for non-admin username", async () => {
       const res = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "alice", password: "password123" }),
+        body: JSON.stringify({ username: "alice", password: "correct-password" }),
       });
 
       const body = (await res.json()) as Record<string, unknown>;
@@ -106,7 +197,7 @@ describe("Auth Routes", () => {
       const res = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
 
       const body = (await res.json()) as Record<string, string>;
@@ -154,7 +245,7 @@ describe("Auth Routes", () => {
       const loginRes = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { refreshToken } = (await loginRes.json()) as Record<string, string>;
 
@@ -197,7 +288,7 @@ describe("Auth Routes", () => {
       const loginRes = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { token } = (await loginRes.json()) as Record<string, string>;
 
@@ -219,7 +310,7 @@ describe("Auth Routes", () => {
       const loginRes = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { token } = (await loginRes.json()) as Record<string, string>;
 
@@ -255,7 +346,7 @@ describe("Auth Routes", () => {
       const loginRes = await router.request("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "alice", password: "password" }),
+        body: JSON.stringify({ username: "alice", password: "correct-password" }),
       });
       const { token } = (await loginRes.json()) as Record<string, string>;
 
@@ -278,7 +369,7 @@ describe("Auth Routes", () => {
       const res = await app.request("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       expect(res.status).toBe(200);
     });
@@ -287,7 +378,7 @@ describe("Auth Routes", () => {
       const loginRes = await app.request("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { refreshToken } = (await loginRes.json()) as Record<string, string>;
 
@@ -308,7 +399,7 @@ describe("Auth Routes", () => {
       const loginRes = await app.request("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { token } = (await loginRes.json()) as Record<string, string>;
 
@@ -322,7 +413,7 @@ describe("Auth Routes", () => {
       const loginRes = await app.request("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "test" }),
+        body: JSON.stringify({ username: "admin", password: "correct-password" }),
       });
       const { refreshToken } = (await loginRes.json()) as Record<string, string>;
 

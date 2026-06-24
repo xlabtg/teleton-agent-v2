@@ -3,11 +3,21 @@
  * Provides login endpoint that returns a JWT-like token.
  */
 
+import {
+  randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+  type BinaryLike,
+  type ScryptOptions,
+} from "node:crypto";
+import { promisify } from "node:util";
 import * as jose from "jose";
 import { Hono } from "hono";
 import { z } from "zod";
 import type {
   AuthConfig,
+  AuthUserRecord,
+  AuthUserStore,
   TokenPayload,
   TokenType,
   UserRole,
@@ -27,8 +37,37 @@ const RefreshSchema = z.object({
   refreshToken: z.string().min(1).max(2048),
 });
 
+const scryptAsync = promisify(scryptCallback) as (
+  password: BinaryLike,
+  salt: BinaryLike,
+  keylen: number,
+  options?: ScryptOptions
+) => Promise<Buffer>;
+
 const USER_ROLES: readonly UserRole[] = ["admin", "user", "plugin", "readonly"];
 const TOKEN_TYPES: readonly TokenType[] = ["access", "refresh"];
+const PASSWORD_HASH_ALGORITHM = "scrypt";
+const PASSWORD_HASH_SEPARATOR = "$";
+const DEFAULT_SCRYPT_PARAMS = {
+  cost: 16_384,
+  blockSize: 8,
+  parallelization: 1,
+  keyLength: 64,
+  maxmem: 64 * 1024 * 1024,
+} as const;
+const DEVELOPMENT_PASSWORD_HASH =
+  "scrypt$16384$8$1$64$dGVsZXRvbi1kZXYtYXV0aC1zYWx0LXYx$qK9wk4IvmtLGtc1zsU750-4gqiahByGRa1qtcCGH4_c-sSKDzn4Oc8rP0KWr__wKw94pd-UE3SQXxJgH05HgrA";
+const DUMMY_PASSWORD_HASH =
+  "scrypt$16384$8$1$64$dGVsZXRvbi1hdXRoLWR1bW15LXNhbHQtdjE$25opN0qr0Zx5t5y3vCaNKML7r5FJXGxYb1ZkVMRnRPteMN-RMBsbofeGf_I1TJ1lgiV_ygzQ7rDest5hnn4fjw";
+
+interface ParsedPasswordHash {
+  cost: number;
+  blockSize: number;
+  parallelization: number;
+  keyLength: number;
+  salt: Buffer;
+  digest: Buffer;
+}
 
 function isUserRole(value: unknown): value is UserRole {
   return typeof value === "string" && USER_ROLES.includes(value as UserRole);
@@ -36,6 +75,122 @@ function isUserRole(value: unknown): value is UserRole {
 
 function isTokenType(value: unknown): value is TokenType {
   return typeof value === "string" && TOKEN_TYPES.includes(value as TokenType);
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parsePasswordHash(passwordHash: string): ParsedPasswordHash | null {
+  const parts = passwordHash.split(PASSWORD_HASH_SEPARATOR);
+  if (parts.length !== 7) {
+    return null;
+  }
+
+  const [algorithm, costRaw, blockSizeRaw, parallelizationRaw, keyLengthRaw, saltRaw, digestRaw] =
+    parts;
+  if (
+    algorithm !== PASSWORD_HASH_ALGORITHM ||
+    costRaw === undefined ||
+    blockSizeRaw === undefined ||
+    parallelizationRaw === undefined ||
+    keyLengthRaw === undefined ||
+    saltRaw === undefined ||
+    digestRaw === undefined
+  ) {
+    return null;
+  }
+
+  const cost = parsePositiveInteger(costRaw);
+  const blockSize = parsePositiveInteger(blockSizeRaw);
+  const parallelization = parsePositiveInteger(parallelizationRaw);
+  const keyLength = parsePositiveInteger(keyLengthRaw);
+  if (!cost || !blockSize || !parallelization || !keyLength) {
+    return null;
+  }
+
+  const salt = Buffer.from(saltRaw, "base64url");
+  const digest = Buffer.from(digestRaw, "base64url");
+  if (salt.length === 0 || digest.length !== keyLength) {
+    return null;
+  }
+
+  return { cost, blockSize, parallelization, keyLength, salt, digest };
+}
+
+async function derivePasswordKey(
+  password: string,
+  salt: Buffer,
+  params: Pick<ParsedPasswordHash, "cost" | "blockSize" | "parallelization" | "keyLength">
+): Promise<Buffer> {
+  return scryptAsync(password, salt, params.keyLength, {
+    N: params.cost,
+    r: params.blockSize,
+    p: params.parallelization,
+    maxmem: DEFAULT_SCRYPT_PARAMS.maxmem,
+  });
+}
+
+export async function hashPassword(password: string, salt: Buffer | string = randomBytes(16)) {
+  const saltBytes = typeof salt === "string" ? Buffer.from(salt, "utf8") : salt;
+  const key = await derivePasswordKey(password, saltBytes, DEFAULT_SCRYPT_PARAMS);
+  return [
+    PASSWORD_HASH_ALGORITHM,
+    DEFAULT_SCRYPT_PARAMS.cost,
+    DEFAULT_SCRYPT_PARAMS.blockSize,
+    DEFAULT_SCRYPT_PARAMS.parallelization,
+    DEFAULT_SCRYPT_PARAMS.keyLength,
+    saltBytes.toString("base64url"),
+    key.toString("base64url"),
+  ].join(PASSWORD_HASH_SEPARATOR);
+}
+
+export async function verifyPasswordHash(password: string, passwordHash: string): Promise<boolean> {
+  const parsed = parsePasswordHash(passwordHash);
+  if (!parsed) {
+    return false;
+  }
+
+  try {
+    const key = await derivePasswordKey(password, parsed.salt, parsed);
+    return timingSafeEqual(key, parsed.digest);
+  } catch {
+    return false;
+  }
+}
+
+export function createStaticUserStore(users: readonly AuthUserRecord[]): AuthUserStore {
+  const usersByUsername = new Map(users.map((user) => [user.username, user]));
+  return {
+    findByUsername(username: string) {
+      return usersByUsername.get(username) ?? null;
+    },
+  };
+}
+
+const DEVELOPMENT_USER_STORE = createStaticUserStore([
+  {
+    username: "admin",
+    role: "admin",
+    passwordHash: DEVELOPMENT_PASSWORD_HASH,
+  },
+]);
+
+function getRuntimeEnv(config: AuthConfig): string {
+  return config.runtimeEnv ?? process.env.NODE_ENV ?? "development";
+}
+
+function getUserStore(config: AuthConfig): AuthUserStore | null {
+  if (config.userStore) {
+    return config.userStore;
+  }
+
+  if (getRuntimeEnv(config) === "production") {
+    return null;
+  }
+
+  return DEVELOPMENT_USER_STORE;
 }
 
 function parseTokenPayload(payload: jose.JWTPayload): TokenPayload | null {
@@ -95,10 +250,7 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
 
   /**
    * POST /api/auth/login
-   * Accepts username/password and returns a token.
-   *
-   * For development/alpha, accepts any non-empty credentials and returns
-   * an "admin" token. Replace with real user validation before production.
+   * Accepts username/password and returns a token after verifying a stored password hash.
    */
   app.post("/login", async (ctx) => {
     let rawBody: unknown;
@@ -119,15 +271,46 @@ export function createAuthRoutes(config: AuthConfig, csrfConfig: CsrfConfig = {}
       );
     }
 
-    const { username, password: _password } = result.data;
+    const { username, password } = result.data;
+    const userStore = getUserStore(config);
+    if (!userStore) {
+      return ctx.json(
+        {
+          error: {
+            code: "AUTH_NOT_CONFIGURED",
+            message: "Password authentication is not configured",
+          },
+        },
+        501
+      );
+    }
 
-    // TODO: Replace with real user store lookup and password hashing
-    const role: UserRole = username === "admin" ? "admin" : "user";
+    const user = await userStore.findByUsername(username);
+    const passwordHash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
+    const passwordMatches = await verifyPasswordHash(password, passwordHash);
 
-    const token = await createToken(username, role, "access", config.jwtSecret, config.tokenExpiry);
+    if (!user || user.disabled || !passwordMatches) {
+      return ctx.json(
+        {
+          error: {
+            code: "AUTHENTICATION_ERROR",
+            message: "Invalid username or password",
+          },
+        },
+        401
+      );
+    }
+
+    const token = await createToken(
+      user.username,
+      user.role,
+      "access",
+      config.jwtSecret,
+      config.tokenExpiry
+    );
     const refreshToken = await createToken(
-      username,
-      role,
+      user.username,
+      user.role,
       "refresh",
       config.jwtSecret,
       config.refreshTokenExpiry

@@ -10,10 +10,23 @@ import { AuthenticationError, ForbiddenError } from "@teleton/core/errors/domain
 export type UserRole = "admin" | "user" | "plugin" | "readonly";
 export type TokenType = "access" | "refresh";
 
+export interface AuthUserRecord {
+  username: string;
+  role: UserRole;
+  passwordHash: string;
+  disabled?: boolean;
+}
+
+export interface AuthUserStore {
+  findByUsername(username: string): AuthUserRecord | null | Promise<AuthUserRecord | null>;
+}
+
 export interface AuthConfig {
   jwtSecret: string;
   tokenExpiry: number;
   refreshTokenExpiry: number;
+  userStore?: AuthUserStore;
+  runtimeEnv?: string;
 }
 
 export interface TokenPayload {
