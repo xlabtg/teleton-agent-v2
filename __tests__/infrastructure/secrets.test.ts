@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EnvSecretsAdapter } from "../../packages/infrastructure/src/secrets/env.adapter.js";
 
 describe("EnvSecretsAdapter", () => {
@@ -8,11 +8,15 @@ describe("EnvSecretsAdapter", () => {
     adapter = new EnvSecretsAdapter("TEST_");
   });
 
+  afterEach(() => {
+    delete process.env.TEST_API_KEY;
+    delete process.env.TEST_DUAL;
+  });
+
   it("should read from environment variables", async () => {
     process.env.TEST_API_KEY = "test-value";
     const value = await adapter.get("API_KEY");
     expect(value).toBe("test-value");
-    delete process.env.TEST_API_KEY;
   });
 
   it("should return undefined for missing keys", async () => {
@@ -35,10 +39,17 @@ describe("EnvSecretsAdapter", () => {
     await adapter.set("DUAL", "override-value");
 
     expect(await adapter.get("DUAL")).toBe("override-value");
+    expect(process.env.TEST_DUAL).toBe("env-value");
+  });
+
+  it("should delete overrides and matching environment variables", async () => {
+    process.env.TEST_DUAL = "env-value";
+    await adapter.set("DUAL", "override-value");
 
     await adapter.delete("DUAL");
-    expect(await adapter.get("DUAL")).toBe("env-value");
 
-    delete process.env.TEST_DUAL;
+    expect(await adapter.get("DUAL")).toBeUndefined();
+    expect(await adapter.has("DUAL")).toBe(false);
+    expect(process.env.TEST_DUAL).toBeUndefined();
   });
 });
