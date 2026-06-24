@@ -163,6 +163,12 @@ describe("SQLiteMemoryRepository", () => {
     const count = await repo.compact(new Date("2023-01-01T00:00:00Z"));
     expect(count).toBe(1);
   });
+
+  it("should close the underlying database connection", async () => {
+    repo.close();
+
+    await expect(repo.store(makeEntry())).rejects.toThrow(/closed|not open/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 export { createServer, startServer, warnIfInsecure } from "./server.js";
-export type { ServerConfig, TlsConfig } from "./server.js";
+export type { ServerConfig, ServerHandle, TlsConfig } from "./server.js";
 export { createAuthMiddleware } from "./middleware/auth.middleware.js";
 export type {
   AuthConfig,

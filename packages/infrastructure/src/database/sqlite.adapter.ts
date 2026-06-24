@@ -34,12 +34,22 @@ function serializeEmbedding(vec: number[]): Buffer {
 
 class SQLiteBase {
   protected readonly db: Database.Database;
+  private closed = false;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     sqliteVec.load(this.db);
+  }
+
+  close(): void {
+    if (this.closed) {
+      return;
+    }
+
+    this.db.close();
+    this.closed = true;
   }
 }
 

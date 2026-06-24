@@ -41,6 +41,22 @@ describe("startServer listen errors", () => {
 
     await expect(startAttempt).rejects.toMatchObject({ code: "EADDRINUSE" });
   });
+
+  it("returns a handle that closes the HTTP server", async () => {
+    const app = new Hono();
+    app.get("/", (ctx) => ctx.text("ok"));
+
+    const server = await startServer(app, BASE_CONFIG);
+
+    try {
+      const response = await fetch(`http://${HOST}:${server.port}/`);
+      expect(await response.text()).toBe("ok");
+    } finally {
+      await server.close();
+    }
+
+    await expect(fetch(`http://${HOST}:${server.port}/`)).rejects.toThrow();
+  });
 });
 
 async function occupyRandomPort(): Promise<number> {

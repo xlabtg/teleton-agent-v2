@@ -9,6 +9,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { readFileSync } from "node:fs";
+import type { AddressInfo } from "node:net";
 import { createHealthRoutes } from "./routes/health.js";
 import { createAgentRoutes } from "./routes/agents.js";
 import { createAuthRoutes } from "./routes/auth.js";
@@ -61,6 +62,15 @@ interface ListeningServer {
   listen(port: number, host: string, callback: () => void): unknown;
   once(event: "error", listener: (error: Error) => void): this;
   off(event: "error", listener: (error: Error) => void): this;
+  close(callback?: (error?: Error) => void): this;
+  address(): AddressInfo | string | null;
+  readonly listening: boolean;
+}
+
+export interface ServerHandle {
+  port: number;
+  secure: boolean;
+  close(): Promise<void>;
 }
 
 /**
@@ -109,6 +119,57 @@ function listenServer(
   });
 }
 
+function getListeningPort(server: ListeningServer, fallbackPort: number): number {
+  const address = server.address();
+  return typeof address === "object" && address !== null ? address.port : fallbackPort;
+}
+
+function closeServer(server: ListeningServer): Promise<void> {
+  if (!server.listening) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function createServerHandle(
+  port: number,
+  secure: boolean,
+  servers: ListeningServer[]
+): ServerHandle {
+  let closed = false;
+
+  return {
+    port,
+    secure,
+    async close() {
+      if (closed) {
+        return;
+      }
+
+      closed = true;
+      const results = await Promise.allSettled(servers.map(closeServer));
+      const failures = results.filter((result) => result.status === "rejected");
+
+      if (failures.length > 0) {
+        throw new AggregateError(
+          failures.map((failure) => failure.reason),
+          "Failed to close API server"
+        );
+      }
+    },
+  };
+}
+
 /**
  * Start the Node.js HTTP/HTTPS server with the given Hono app.
  * Returns a Promise that resolves when the server is listening.
@@ -121,10 +182,7 @@ function listenServer(
  * When TLS is NOT configured:
  *  - Starts a plain HTTP server on config.port.
  */
-export async function startServer(
-  app: Hono,
-  config: ServerConfig
-): Promise<{ port: number; secure: boolean }> {
+export async function startServer(app: Hono, config: ServerConfig): Promise<ServerHandle> {
   warnIfInsecure(config);
 
   if (config.tls) {
@@ -142,6 +200,9 @@ export async function startServer(
       console.log(`✅ HTTPS server listening on https://${config.host}:${config.port}`); // eslint-disable-line no-console
     });
 
+    const servers: ListeningServer[] = [httpsServer];
+    const port = getListeningPort(httpsServer, config.port);
+
     if (config.tls.httpRedirectPort !== undefined) {
       const redirectPort = config.tls.httpRedirectPort;
       const httpsPort = config.port;
@@ -151,14 +212,20 @@ export async function startServer(
         res.writeHead(301, { Location: location });
         res.end();
       });
-      await listenServer(redirectServer, redirectPort, config.host, () => {
-        console.log(
-          `✅ HTTP→HTTPS redirect server listening on http://${config.host}:${redirectPort}`
-        );
-      });
+      try {
+        await listenServer(redirectServer, redirectPort, config.host, () => {
+          console.log(
+            `✅ HTTP→HTTPS redirect server listening on http://${config.host}:${redirectPort}`
+          );
+        });
+      } catch (error) {
+        await closeServer(httpsServer).catch(() => {});
+        throw error;
+      }
+      servers.push(redirectServer);
     }
 
-    return { port: config.port, secure: true };
+    return createServerHandle(port, true, servers);
   }
 
   const httpServer = createAdaptorServer({ fetch: app.fetch });
@@ -166,7 +233,7 @@ export async function startServer(
     console.log(`✅ HTTP server listening on http://${config.host}:${config.port}`); // eslint-disable-line no-console
   });
 
-  return { port: config.port, secure: false };
+  return createServerHandle(getListeningPort(httpServer, config.port), false, [httpServer]);
 }
 
 export function createServer(config: ServerConfig): Hono {

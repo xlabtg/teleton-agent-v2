@@ -102,4 +102,22 @@ describe("InMemoryEventBus", () => {
     expect(handler1.handle).toHaveBeenCalled();
     expect(handler2.handle).toHaveBeenCalled();
   });
+
+  it("should remove all subscribers on close", async () => {
+    const bus = new InMemoryEventBus();
+    const handler: EventHandler = { handle: vi.fn().mockResolvedValue(undefined) };
+
+    bus.subscribe("test.event", handler);
+    bus.close();
+
+    await bus.publish({
+      id: "1",
+      type: "test.event",
+      timestamp: new Date(),
+      payload: {},
+      source: "test",
+    });
+
+    expect(handler.handle).not.toHaveBeenCalled();
+  });
 });

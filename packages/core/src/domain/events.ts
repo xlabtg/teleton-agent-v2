@@ -46,4 +46,5 @@ export interface EventBus {
   publish(event: DomainEvent): Promise<void>;
   subscribe<T extends DomainEvent>(eventType: string, handler: EventHandler<T>): void;
   unsubscribe(eventType: string, handler: EventHandler): void;
+  close?(): Promise<void> | void;
 }
