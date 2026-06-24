@@ -99,13 +99,42 @@ export function redactSensitiveFields(
   sensitiveKeys: string[] = DEFAULT_SENSITIVE_KEYS
 ): AuditEvent {
   if (!event.metadata) return event;
+  return { ...event, metadata: redactMetadataObject(event.metadata, sensitiveKeys) };
+}
+
+function redactMetadataObject(
+  metadata: Record<string, unknown>,
+  sensitiveKeys: string[]
+): Record<string, unknown> {
   const redacted: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(event.metadata)) {
-    redacted[k] = sensitiveKeys.some((s) => k.toLowerCase().includes(s.toLowerCase()))
+  for (const [key, value] of Object.entries(metadata)) {
+    redacted[key] = isSensitiveKey(key, sensitiveKeys)
       ? "[REDACTED]"
-      : v;
+      : redactMetadataValue(value, sensitiveKeys);
   }
-  return { ...event, metadata: redacted };
+  return redacted;
+}
+
+function redactMetadataValue(value: unknown, sensitiveKeys: string[]): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactMetadataValue(item, sensitiveKeys));
+  }
+
+  if (isPlainObject(value)) {
+    return redactMetadataObject(value, sensitiveKeys);
+  }
+
+  return value;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function isSensitiveKey(key: string, sensitiveKeys: string[]): boolean {
+  return sensitiveKeys.some((s) => key.toLowerCase().includes(s.toLowerCase()));
 }
 
 export const DEFAULT_SENSITIVE_KEYS: string[] = [

@@ -62,6 +62,53 @@ describe("AuditStore", () => {
     expect(stored.metadata?.["normalField"]).toBe("ok");
   });
 
+  it("redacts nested sensitive metadata on write", async () => {
+    const event = makeEvent({
+      metadata: {
+        request: {
+          headers: {
+            authorization: "Bearer leaked-token",
+          },
+        },
+        users: [{ password: "nested-password" }],
+      },
+    });
+
+    const stored = await store.append(event);
+
+    expect(stored.metadata).toEqual({
+      request: {
+        headers: {
+          authorization: "[REDACTED]",
+        },
+      },
+      users: [{ password: "[REDACTED]" }],
+    });
+  });
+
+  it("does not share retained nested metadata objects with the caller", async () => {
+    const metadata = {
+      request: {
+        body: {
+          safeField: "original",
+        },
+      },
+    };
+    const event = makeEvent({ metadata });
+
+    await store.append(event);
+    metadata.request.body.safeField = "mutated";
+
+    expect(store.getAll()[0].metadata).toEqual({
+      request: {
+        body: {
+          safeField: "original",
+        },
+      },
+    });
+    expect(await store.verifyIntegrity()).toBe(true);
+  });
+
   it("enforces maxEvents cap by dropping oldest events", async () => {
     const capped = new AuditStore({ maxEvents: 3 });
     for (let i = 0; i < 5; i++) {

@@ -121,4 +121,76 @@ describe("redactSensitiveFields", () => {
     expect(result.metadata!["nationalId"]).toBe("[REDACTED]");
     expect(result.metadata!["passport"]).toBe("[REDACTED]");
   });
+
+  it("recursively redacts sensitive keys in nested objects", () => {
+    const event = makeEvent({
+      request: {
+        headers: {
+          authorization: "Bearer nested-token",
+        },
+      },
+      user: {
+        profile: {
+          password: "nested-password",
+          displayName: "Alice",
+        },
+      },
+    });
+
+    const result = redactSensitiveFields(event);
+
+    expect(result.metadata).toEqual({
+      request: {
+        headers: {
+          authorization: "[REDACTED]",
+        },
+      },
+      user: {
+        profile: {
+          password: "[REDACTED]",
+          displayName: "Alice",
+        },
+      },
+    });
+  });
+
+  it("recursively redacts sensitive keys inside arrays", () => {
+    const event = makeEvent({
+      attempts: [
+        { token: "array-token", status: "blocked" },
+        { nested: { mnemonic: "word1 word2 word3" } },
+      ],
+    });
+
+    const result = redactSensitiveFields(event);
+
+    expect(result.metadata).toEqual({
+      attempts: [
+        { token: "[REDACTED]", status: "blocked" },
+        { nested: { mnemonic: "[REDACTED]" } },
+      ],
+    });
+  });
+
+  it("deep-clones retained nested metadata values", () => {
+    const metadata = {
+      request: {
+        headers: {
+          contentType: "application/json",
+        },
+      },
+    };
+    const event = makeEvent(metadata);
+
+    const result = redactSensitiveFields(event);
+    metadata.request.headers.contentType = "text/plain";
+
+    expect(result.metadata).toEqual({
+      request: {
+        headers: {
+          contentType: "application/json",
+        },
+      },
+    });
+  });
 });
