@@ -36,6 +36,7 @@ function buildTestApp() {
   app.route("/", createHealthRoutes());
   app.route("/api/auth", createAuthRoutes(TEST_AUTH_CONFIG));
   app.route("/api/docs", createDocsRoutes());
+  app.get("/api/docs-internal", (ctx) => ctx.json({ ok: true }));
   return app;
 }
 
@@ -102,6 +103,11 @@ describe("Docs Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.openapi).toBe("3.0.3");
+    });
+
+    it("should require Authorization for docs-prefixed sibling routes", async () => {
+      const res = await app.request("/api/docs-internal");
+      expect(res.status).toBe(401);
     });
   });
 
