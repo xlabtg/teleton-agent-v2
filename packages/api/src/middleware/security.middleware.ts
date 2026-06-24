@@ -7,6 +7,8 @@ import type { Context, Next } from "hono";
 import { isIP } from "node:net";
 import { RateLimiter } from "@teleton/security/rate-limiter.js";
 
+const BODY_SIZE_LIMIT_ERROR_CODE = "PAYLOAD_TOO_LARGE";
+
 export interface SecurityConfig {
   rateLimitWindow: number; // ms
   rateLimitMax: number; // requests per window
@@ -274,21 +276,111 @@ export function createCorsConfig(origins: string[]) {
 
 /**
  * Request body size limit middleware.
- * Rejects requests whose Content-Length exceeds the configured maximum.
+ * Rejects requests whose actual body size exceeds the configured maximum.
  * Guards against DoS attacks via large payloads.
  */
 export function createBodySizeLimitMiddleware(config: SecurityConfig) {
   const limit = config.maxBodySize ?? 1_048_576; // default 1 MB
   return async (ctx: Context, next: Next): Promise<Response | void> => {
     const contentLength = ctx.req.header("content-length");
-    if (contentLength !== undefined && parseInt(contentLength, 10) > limit) {
-      return ctx.json(
-        { error: { code: "PAYLOAD_TOO_LARGE", message: "Request body exceeds size limit" } },
-        413 as never
-      );
+    const advertisedLength = parseContentLength(contentLength);
+
+    if (advertisedLength !== undefined && advertisedLength > limit) {
+      return bodyTooLargeResponse(ctx);
     }
+
+    const rawRequest = ctx.req.raw;
+    if (rawRequest.body !== null) {
+      try {
+        ctx.req.raw = await cloneRequestWithLimitedBody(rawRequest, limit);
+      } catch (error) {
+        if (error instanceof BodySizeLimitExceededError) {
+          return bodyTooLargeResponse(ctx);
+        }
+        throw error;
+      }
+    }
+
     await next();
   };
+}
+
+function parseContentLength(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+async function cloneRequestWithLimitedBody(request: Request, limit: number): Promise<Request> {
+  const body = await readBodyWithLimit(request, limit);
+  const init: RequestInit = {
+    method: request.method,
+    headers: request.headers,
+    body,
+    redirect: request.redirect,
+    signal: request.signal,
+  };
+
+  return new Request(request.url, init);
+}
+
+async function readBodyWithLimit(request: Request, limit: number): Promise<Uint8Array> {
+  if (request.body === null) {
+    return new Uint8Array();
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > limit) {
+        await reader.cancel();
+        throw new BodySizeLimitExceededError();
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return body;
+}
+
+function bodyTooLargeResponse(ctx: Context): Response {
+  return ctx.json(
+    {
+      error: {
+        code: BODY_SIZE_LIMIT_ERROR_CODE,
+        message: "Request body exceeds size limit",
+      },
+    },
+    413 as never
+  );
+}
+
+class BodySizeLimitExceededError extends Error {
+  constructor() {
+    super("Request body exceeds size limit");
+  }
 }
 
 /**

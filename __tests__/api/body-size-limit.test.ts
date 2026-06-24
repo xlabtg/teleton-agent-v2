@@ -1,6 +1,6 @@
 /**
  * Body size limit middleware tests.
- * Verifies that requests exceeding the configured Content-Length are rejected.
+ * Verifies that requests exceeding the configured body size are rejected.
  */
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
@@ -24,6 +24,21 @@ function buildApp(config = TEST_SECURITY_CONFIG) {
     return ctx.json({ received: body.length });
   });
   return app;
+}
+
+function streamBody(body: string): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body));
+      controller.close();
+    },
+  });
+}
+
+async function expectPayloadTooLarge(res: Response): Promise<void> {
+  expect(res.status).toBe(413);
+  const body = (await res.json()) as Record<string, unknown>;
+  expect((body.error as Record<string, unknown>).code).toBe("PAYLOAD_TOO_LARGE");
 }
 
 describe("Body Size Limit Middleware", () => {
@@ -50,9 +65,47 @@ describe("Body Size Limit Middleware", () => {
       },
       body: "x".repeat(2048),
     });
-    expect(res.status).toBe(413);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect((body.error as Record<string, unknown>).code).toBe("PAYLOAD_TOO_LARGE");
+    await expectPayloadTooLarge(res);
+  });
+
+  it("should reject chunked requests exceeding the actual body size limit", async () => {
+    const app = buildApp();
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain",
+        "Transfer-Encoding": "chunked",
+      },
+      body: streamBody("x".repeat(2048)),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    await expectPayloadTooLarge(res);
+  });
+
+  it("should reject over-limit requests with a non-numeric Content-Length header", async () => {
+    const app = buildApp();
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain",
+        "Content-Length": "not-a-number",
+      },
+      body: "x".repeat(2048),
+    });
+    await expectPayloadTooLarge(res);
+  });
+
+  it("should reject requests when Content-Length understates the actual body size", async () => {
+    const app = buildApp();
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain",
+        "Content-Length": "10",
+      },
+      body: "x".repeat(2048),
+    });
+    await expectPayloadTooLarge(res);
   });
 
   it("should use default 1 MB limit when maxBodySize is not specified", async () => {
