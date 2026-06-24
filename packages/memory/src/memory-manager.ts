@@ -161,8 +161,8 @@ export class MemoryManager {
       return { compactedCount: 0, summariesCreated: 0 };
     }
 
-    // Get all memories and evaluate retention
-    const allMemories = await this.memoryRepository.search("", 10000);
+    // Get all memories and evaluate retention without invoking full-text search.
+    const allMemories = await this.memoryRepository.list(10000);
     const evictionCandidates = this.retentionPolicy.getEvictionCandidates(allMemories);
 
     const compactionResult = await this.compaction.compact(evictionCandidates.map((c) => c.entry));

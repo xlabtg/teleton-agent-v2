@@ -9,6 +9,7 @@ import type { DomainEvent } from "../domain/events.js";
 export interface MemoryRepository {
   store(entry: Omit<MemoryEntry, "id">): Promise<MemoryEntry>;
   findById(id: string): Promise<MemoryEntry | null>;
+  list(limit?: number): Promise<MemoryEntry[]>;
   search(query: string, limit?: number): Promise<MemoryEntry[]>;
   searchByEmbedding(embedding: number[], limit?: number): Promise<MemoryEntry[]>;
   update(id: string, updates: Partial<MemoryEntry>): Promise<MemoryEntry>;

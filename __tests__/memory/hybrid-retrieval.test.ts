@@ -32,6 +32,7 @@ describe("HybridRetrieval", () => {
     memoryRepo = {
       store: vi.fn(),
       findById: vi.fn(),
+      list: vi.fn().mockResolvedValue([]),
       search: vi.fn().mockResolvedValue([]),
       searchByEmbedding: vi.fn().mockResolvedValue([]),
       update: vi.fn(),
