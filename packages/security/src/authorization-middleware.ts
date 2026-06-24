@@ -92,7 +92,7 @@ export class AuthorizationMiddleware {
     // RBAC: collect all permissions the actor holds via their roles
     const actorPermissions = this.collectPermissions(actor.roles);
 
-    const hasPermission = actorPermissions.has(action) || actorPermissions.has("*");
+    const hasPermission = this.hasPermission(actorPermissions, action);
 
     // ABAC: run action-specific policy if registered
     const policy = this.policies[action] ?? this.policies["*"];
@@ -155,6 +155,29 @@ export class AuthorizationMiddleware {
       }
     }
     return permissions;
+  }
+
+  /**
+   * Match exact permissions, the global wildcard, and hierarchical namespace
+   * wildcards such as "agent:*" for "agent:execute" and "agent:tools:run".
+   */
+  private hasPermission(permissions: Set<Permission>, action: string): boolean {
+    if (permissions.has(action) || permissions.has("*")) {
+      return true;
+    }
+
+    for (const permission of permissions) {
+      if (!permission.endsWith(":*")) {
+        continue;
+      }
+
+      const prefix = permission.slice(0, -1);
+      if (action.startsWith(prefix)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

@@ -40,6 +40,19 @@ describe("AuthorizationMiddleware", () => {
     expect(result.allowed).toBe(true);
   });
 
+  it("hierarchical wildcard permissions grant matching child actions", async () => {
+    const auth = new AuthorizationMiddleware({
+      roles: [{ name: "admin", permissions: ["agent:*", "memory:read:*"] }],
+    });
+
+    await expect(auth.check(ADMIN, "agent:execute")).resolves.toMatchObject({ allowed: true });
+    await expect(auth.check(ADMIN, "agent:tools:run")).resolves.toMatchObject({ allowed: true });
+    await expect(auth.check(ADMIN, "memory:read:private")).resolves.toMatchObject({
+      allowed: true,
+    });
+    await expect(auth.check(ADMIN, "memory:write")).resolves.toMatchObject({ allowed: false });
+  });
+
   it("authorize() throws ForbiddenError on denial", async () => {
     const auth = new AuthorizationMiddleware({ roles: [] });
     await expect(auth.authorize(GUEST, "secret:read")).rejects.toThrow(ForbiddenError);
@@ -74,6 +87,19 @@ describe("AuthorizationMiddleware", () => {
     });
     const result = await auth.check(GUEST, "special:action");
     expect(result.allowed).toBe(true);
+  });
+
+  it("does not fail open on policy denial when denyByDefault=false", async () => {
+    const auth = new AuthorizationMiddleware({
+      roles: [{ name: "admin", permissions: ["agent:*"] }],
+      denyByDefault: false,
+      policies: {
+        "agent:execute": () => false,
+      },
+    });
+
+    const result = await auth.check(ADMIN, "agent:execute");
+    expect(result.allowed).toBe(false);
   });
 
   it("defineRole adds a role at runtime", async () => {
