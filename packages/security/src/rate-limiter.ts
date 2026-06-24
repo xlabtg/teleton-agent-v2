@@ -112,11 +112,12 @@ export class RateLimiter {
     let limitedByWindow: number | undefined;
     let minRemaining = Infinity;
     let resetAt = 0;
+    const nextStates = states.map((state) => ({ ...state }));
 
     // Evaluate each window
     for (let i = 0; i < this.windows.length; i++) {
       const win = this.windows[i];
-      const state = states[i];
+      const state = nextStates[i];
 
       // Reset window if expired
       if (now - state.windowStart >= win.windowMs) {
@@ -151,8 +152,9 @@ export class RateLimiter {
     }
 
     // All windows passed — consume
-    for (const state of states) {
-      state.count++;
+    for (let i = 0; i < states.length; i++) {
+      states[i].count = nextStates[i].count + 1;
+      states[i].windowStart = nextStates[i].windowStart;
     }
 
     return {
@@ -178,10 +180,7 @@ export class RateLimiter {
    * Manually lift a ban for the given key.
    */
   unban(key: string): void {
-    const ban = this.banStates.get(key);
-    if (ban) {
-      ban.bannedUntil = undefined;
-    }
+    this.banStates.delete(key);
   }
 
   /**
