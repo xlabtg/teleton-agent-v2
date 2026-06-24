@@ -26,6 +26,9 @@ export interface AgentRuntimeConfig {
 
 export interface ToolExecutor {
   name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  scope?: string;
   execute(args: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
 
@@ -49,11 +52,11 @@ export class AgentRuntime {
   }
 
   getRegisteredTools(): ToolDefinition[] {
-    return Array.from(this.toolRegistry.entries()).map(([name, _executor]) => ({
-      name,
-      description: `Tool: ${name}`,
-      parameters: {},
-      scope: "default",
+    return Array.from(this.toolRegistry.values()).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      scope: tool.scope ?? "default",
     }));
   }
 
@@ -244,7 +247,18 @@ export class AgentRuntime {
 
       try {
         signal.throwIfAborted();
-        const output = await tool.execute(action.toolArgs ?? {}, { signal });
+        const args = action.toolArgs ?? {};
+        const validationError = validateToolArgs(tool.parameters, args);
+        if (validationError) {
+          return {
+            success: false,
+            output: null,
+            error: validationError,
+            duration: Date.now() - startTime,
+          };
+        }
+
+        const output = await tool.execute(args, { signal });
         signal.throwIfAborted();
         return {
           success: true,
@@ -292,4 +306,94 @@ export class AgentRuntime {
       timestamp: new Date(),
     };
   }
+}
+
+function validateToolArgs(
+  schema: Record<string, unknown>,
+  args: Record<string, unknown>
+): string | undefined {
+  const errors: string[] = [];
+  validateSchema(schema, args, "toolArgs", errors);
+  return errors.length > 0 ? `Invalid tool arguments: ${errors.join("; ")}` : undefined;
+}
+
+function validateSchema(
+  schema: Record<string, unknown>,
+  value: unknown,
+  path: string,
+  errors: string[]
+): void {
+  const expectedTypes = normalizeType(schema.type);
+  if (expectedTypes.length > 0 && !expectedTypes.some((type) => isJsonSchemaType(value, type))) {
+    errors.push(`${path} must be ${expectedTypes.join(" or ")}`);
+    return;
+  }
+
+  const effectiveTypes = expectedTypes.length > 0 ? expectedTypes : inferSchemaTypes(schema);
+  if (!effectiveTypes.includes("object")) {
+    return;
+  }
+
+  if (!isPlainObject(value)) {
+    errors.push(`${path} must be object`);
+    return;
+  }
+
+  const properties = isPlainObject(schema.properties) ? schema.properties : {};
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === "string")
+    : [];
+
+  for (const key of required) {
+    if (!(key in value)) {
+      errors.push(`${path}.${key} is required`);
+    }
+  }
+
+  for (const [key, propertySchema] of Object.entries(properties)) {
+    if (key in value && isPlainObject(propertySchema)) {
+      validateSchema(propertySchema, value[key], `${path}.${key}`, errors);
+    }
+  }
+}
+
+function normalizeType(type: unknown): string[] {
+  if (typeof type === "string") {
+    return [type];
+  }
+
+  if (Array.isArray(type)) {
+    return type.filter((entry): entry is string => typeof entry === "string");
+  }
+
+  return [];
+}
+
+function inferSchemaTypes(schema: Record<string, unknown>): string[] {
+  return isPlainObject(schema.properties) || Array.isArray(schema.required) ? ["object"] : [];
+}
+
+function isJsonSchemaType(value: unknown, type: string): boolean {
+  switch (type) {
+    case "array":
+      return Array.isArray(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "integer":
+      return Number.isInteger(value);
+    case "null":
+      return value === null;
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "object":
+      return isPlainObject(value);
+    case "string":
+      return typeof value === "string";
+    default:
+      return true;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
