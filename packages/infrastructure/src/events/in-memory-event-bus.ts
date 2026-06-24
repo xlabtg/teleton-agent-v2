@@ -32,4 +32,8 @@ export class InMemoryEventBus implements EventBus {
   unsubscribe(eventType: string, handler: EventHandler): void {
     this.handlers.get(eventType)?.delete(handler);
   }
+
+  close(): void {
+    this.handlers.clear();
+  }
 }

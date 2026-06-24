@@ -15,12 +15,29 @@ import {
   SQLiteTaskRepository,
 } from "@teleton/infrastructure/database/sqlite.adapter.js";
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
-import { createServer, startServer } from "@teleton/api/server.js";
+import { createServer, startServer, type ServerHandle } from "@teleton/api/server.js";
 import { appConfigSchema } from "../../../configs/config.schema.js";
 import { createAgentServerConfig } from "./server-config.js";
 
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+
+interface CloseableResource {
+  name: string;
+  close(): Promise<void> | void;
+}
+
+export interface TeletonAppOptions {
+  shutdownTimeoutMs?: number;
+  exitProcess?: (code: number) => never;
+}
+
 export class TeletonApp {
   private running = false;
+  private resources: CloseableResource[] = [];
+  private unregisterProcessHandlers?: () => void;
+  private shutdownPromise?: Promise<void>;
+
+  constructor(private readonly options: TeletonAppOptions = {}) {}
 
   isRunning(): boolean {
     return this.running;
@@ -41,43 +58,132 @@ export class TeletonApp {
     const eventBus = new InMemoryEventBus();
     const memoryRepo = new SQLiteMemoryRepository(config.database.path);
     const taskRepo = new SQLiteTaskRepository(config.database.path);
+    const resources: CloseableResource[] = [
+      { name: "event bus", close: () => eventBus.close() },
+      { name: "memory repository", close: () => memoryRepo.close() },
+      { name: "task repository", close: () => taskRepo.close() },
+    ];
     console.log("✅ Infrastructure initialized");
 
-    // 4. Create runtime and orchestrator
-    const runtime = new AgentRuntime(
-      {
-        maxIterations: config.agent.maxIterations,
-        timeoutMs: config.agent.timeoutMs,
-        personality: config.agent.personality,
-      },
-      // TODO: Wire actual LLM provider
-      null as never,
-      memoryRepo,
-      taskRepo,
-      eventBus
-    );
+    try {
+      // 4. Create runtime and orchestrator
+      const runtime = new AgentRuntime(
+        {
+          maxIterations: config.agent.maxIterations,
+          timeoutMs: config.agent.timeoutMs,
+          personality: config.agent.personality,
+        },
+        // TODO: Wire actual LLM provider
+        null as never,
+        memoryRepo,
+        taskRepo,
+        eventBus
+      );
 
-    new AgentOrchestrator(runtime, taskRepo, eventBus);
-    console.log("✅ Agent runtime created");
+      new AgentOrchestrator(runtime, taskRepo, eventBus);
+      console.log("✅ Agent runtime created");
 
-    // 5. Start API server
-    const serverConfig = createAgentServerConfig(config);
-    const app = createServer(serverConfig);
-    await startServer(app, serverConfig);
+      // 5. Start API server
+      const serverConfig = createAgentServerConfig(config);
+      const app = createServer(serverConfig);
+      const apiServer: ServerHandle = await startServer(app, serverConfig);
+      resources.push({ name: "API server", close: () => apiServer.close() });
+    } catch (error) {
+      await this.closeResources([...resources].reverse());
+      throw error;
+    }
 
     // 6. Mark as running
+    this.resources = resources;
     this.running = true;
+    this.registerProcessHandlers();
     console.log("\n🤖 Teleton Agent V2 is ready!\n");
+  }
 
-    // Handle graceful shutdown
-    const shutdown = async () => {
-      console.log("\n🛑 Shutting down...");
-      this.running = false;
-      process.exit(0);
+  async stop(): Promise<void> {
+    this.unregisterProcessHandlers?.();
+    this.unregisterProcessHandlers = undefined;
+    this.running = false;
+
+    const resources = this.resources.splice(0).reverse();
+    await this.closeResources(resources);
+  }
+
+  private registerProcessHandlers(): void {
+    this.unregisterProcessHandlers?.();
+
+    const shutdownOnSignal = (signal: NodeJS.Signals) => {
+      void this.shutdown(signal, 0);
+    };
+    const shutdownOnUnhandledRejection = (reason: unknown) => {
+      console.error("Unhandled promise rejection:", reason);
+      void this.shutdown("unhandledRejection", 1);
+    };
+    const shutdownOnUncaughtException = (error: Error) => {
+      console.error("Uncaught exception:", error);
+      void this.shutdown("uncaughtException", 1);
     };
 
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdownOnSignal);
+    process.on("SIGTERM", shutdownOnSignal);
+    process.on("unhandledRejection", shutdownOnUnhandledRejection);
+    process.on("uncaughtException", shutdownOnUncaughtException);
+
+    this.unregisterProcessHandlers = () => {
+      process.off("SIGINT", shutdownOnSignal);
+      process.off("SIGTERM", shutdownOnSignal);
+      process.off("unhandledRejection", shutdownOnUnhandledRejection);
+      process.off("uncaughtException", shutdownOnUncaughtException);
+    };
+  }
+
+  private shutdown(reason: string, exitCode: number): Promise<void> {
+    this.shutdownPromise ??= this.performShutdown(reason, exitCode);
+    return this.shutdownPromise;
+  }
+
+  private async performShutdown(reason: string, exitCode: number): Promise<void> {
+    console.log(`\n🛑 Shutting down after ${reason}...`);
+
+    const timeout = setTimeout(() => {
+      console.error(`Shutdown timed out after ${this.shutdownTimeoutMs}ms, forcing process exit.`);
+      this.exitProcess(1);
+    }, this.shutdownTimeoutMs);
+    timeout.unref();
+
+    try {
+      await this.stop();
+      clearTimeout(timeout);
+      this.exitProcess(exitCode);
+    } catch (error) {
+      clearTimeout(timeout);
+      console.error("Shutdown cleanup failed:", error);
+      this.exitProcess(exitCode === 0 ? 1 : exitCode);
+    }
+  }
+
+  private async closeResources(resources: CloseableResource[]): Promise<void> {
+    const failures: unknown[] = [];
+
+    for (const resource of resources) {
+      try {
+        await resource.close();
+      } catch (error) {
+        failures.push(new Error(`Failed to close ${resource.name}`, { cause: error }));
+      }
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Failed to close application resources");
+    }
+  }
+
+  private get shutdownTimeoutMs(): number {
+    return this.options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
+  }
+
+  private exitProcess(code: number): never {
+    return (this.options.exitProcess ?? process.exit)(code);
   }
 
   private loadConfig(configPath?: string): AppConfig {
