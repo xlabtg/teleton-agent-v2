@@ -96,5 +96,17 @@ describe("EventStore", () => {
       store.import(snapshot); // duplicate — should be ignored
       expect(store.size).toBe(1);
     });
+
+    it("should skip duplicate IDs within a single imported batch", () => {
+      const store = new EventStore();
+
+      store.import([
+        makeEvent("1", "t", "2024-01-01T00:00:00.000Z"),
+        makeEvent("1", "t", "2024-01-02T00:00:00.000Z"),
+      ]);
+
+      expect(store.size).toBe(1);
+      expect(store.query().map((event) => event.id)).toEqual(["1"]);
+    });
   });
 });
