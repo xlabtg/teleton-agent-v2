@@ -147,6 +147,18 @@ const openApiSpec = {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },
           },
+          "401": {
+            description: "Invalid username or password",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "501": {
+            description: "Password authentication is not configured",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
         },
       },
     },
