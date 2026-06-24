@@ -37,6 +37,8 @@ export interface MemoryEntry {
   id: string;
   content: string;
   embedding?: number[];
+  score?: number;
+  vectorScore?: number;
   importance: number;
   createdAt: Date;
   accessedAt: Date;
