@@ -8,6 +8,16 @@ import { isIP } from "node:net";
 import { RateLimiter } from "@teleton/security/rate-limiter.js";
 
 const BODY_SIZE_LIMIT_ERROR_CODE = "PAYLOAD_TOO_LARGE";
+const DEFAULT_CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self'";
+const DOCS_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' https://unpkg.com",
+  "style-src 'self' https://unpkg.com",
+  "font-src 'self' https://unpkg.com data:",
+  "img-src 'self' data:",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join("; ");
 
 export interface SecurityConfig {
   rateLimitWindow: number; // ms
@@ -24,6 +34,10 @@ export interface AuthRateLimitConfig {
   /** Max refresh token requests per IP per window. Default: 20 per 15 min */
   refreshWindowMs?: number;
   refreshMaxRequests?: number;
+}
+
+function isDocsPath(path: string): boolean {
+  return path === "/api/docs" || path.startsWith("/api/docs/");
 }
 
 /**
@@ -231,11 +245,15 @@ export function securityHeadersMiddleware() {
   return async (ctx: Context, next: Next) => {
     await next();
 
+    const contentSecurityPolicy = isDocsPath(ctx.req.path)
+      ? DOCS_CONTENT_SECURITY_POLICY
+      : DEFAULT_CONTENT_SECURITY_POLICY;
+
     ctx.header("X-Content-Type-Options", "nosniff");
     ctx.header("X-Frame-Options", "DENY");
     ctx.header("X-XSS-Protection", "0"); // Rely on CSP instead
     ctx.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
-    ctx.header("Content-Security-Policy", "default-src 'self'; script-src 'self'");
+    ctx.header("Content-Security-Policy", contentSecurityPolicy);
     ctx.header("Referrer-Policy", "strict-origin-when-cross-origin");
     ctx.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   };

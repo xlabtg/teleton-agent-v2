@@ -242,8 +242,8 @@ const openApiSpec = {
   },
 };
 
-/** Inline Swagger UI HTML (uses CDN assets — no extra npm packages required). */
-function buildSwaggerHtml(specUrl: string): string {
+/** Swagger UI HTML (uses CDN assets and a same-origin bootstrap script). */
+function buildSwaggerHtml(initScriptUrl: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -255,17 +255,20 @@ function buildSwaggerHtml(specUrl: string): string {
 <body>
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script>
-    SwaggerUIBundle({
-      url: "${specUrl}",
-      dom_id: "#swagger-ui",
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
-      layout: "BaseLayout",
-      deepLinking: true,
-    });
-  </script>
+  <script src="${initScriptUrl}"></script>
 </body>
 </html>`;
+}
+
+function buildSwaggerInitializer(specUrl: string): string {
+  return `SwaggerUIBundle({
+  url: ${JSON.stringify(specUrl)},
+  dom_id: "#swagger-ui",
+  presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+  layout: "BaseLayout",
+  deepLinking: true,
+});
+`;
 }
 
 export function createDocsRoutes(): Hono {
@@ -273,12 +276,18 @@ export function createDocsRoutes(): Hono {
 
   /** GET /api/docs — Swagger UI (publicly accessible) */
   app.get("/", (ctx) => {
-    return ctx.html(buildSwaggerHtml("/api/docs/openapi.json"));
+    return ctx.html(buildSwaggerHtml("/api/docs/swagger-init.js"));
   });
 
   /** GET /api/docs/openapi.json — Raw OpenAPI spec (publicly accessible) */
   app.get("/openapi.json", (ctx) => {
     return ctx.json(openApiSpec);
+  });
+
+  /** GET /api/docs/swagger-init.js — Same-origin Swagger UI bootstrap script */
+  app.get("/swagger-init.js", (ctx) => {
+    ctx.header("Content-Type", "application/javascript; charset=utf-8");
+    return ctx.body(buildSwaggerInitializer("/api/docs/openapi.json"));
   });
 
   return app;
