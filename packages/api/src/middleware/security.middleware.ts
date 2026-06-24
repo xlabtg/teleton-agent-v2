@@ -9,6 +9,7 @@ import { RateLimiter } from "@teleton/security/rate-limiter.js";
 
 const BODY_SIZE_LIMIT_ERROR_CODE = "PAYLOAD_TOO_LARGE";
 const DEFAULT_CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self'";
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const DOCS_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' https://unpkg.com",
@@ -406,7 +407,11 @@ class BodySizeLimitExceededError extends Error {
  */
 export function requestIdMiddleware() {
   return async (ctx: Context, next: Next) => {
-    const requestId = ctx.req.header("x-request-id") ?? crypto.randomUUID();
+    const providedRequestId = ctx.req.header("x-request-id");
+    const requestId =
+      providedRequestId !== undefined && REQUEST_ID_PATTERN.test(providedRequestId)
+        ? providedRequestId
+        : crypto.randomUUID();
     ctx.set("requestId", requestId);
     ctx.header("X-Request-Id", requestId);
     await next();
