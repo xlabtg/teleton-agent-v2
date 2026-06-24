@@ -15,8 +15,14 @@ export interface DeadLetterEntry {
   id: string;
   /** The event that failed processing. */
   event: TypedEvent;
-  /** The error message from the failed handler. */
+  /** Most recent error message from the failed handler or replay attempt. */
   errorMessage: string;
+  /** Message from the most recent failed replay attempt, if any. */
+  lastErrorMessage?: string;
+  /** Error name from the most recent failed replay attempt, if any. */
+  lastErrorName?: string;
+  /** Error stack from the most recent failed replay attempt, if any. */
+  lastErrorStack?: string;
   /** ISO timestamp when the entry was added to the DLQ. */
   enqueuedAt: string;
   /** ISO timestamp of the most recent retry attempt, if any. */
@@ -30,6 +36,23 @@ export interface DeadLetterEntry {
 }
 
 export type DlqReplayHandler = (event: TypedEvent) => Promise<void>;
+
+export interface DlqReplayResult {
+  ok: boolean;
+  error?: Error;
+}
+
+export interface DlqReplayFailure {
+  id: string;
+  event: TypedEvent;
+  error: Error;
+}
+
+export interface DlqRetryAllResult {
+  success: number;
+  failed: number;
+  failures: DlqReplayFailure[];
+}
 
 export interface DeadLetterQueueConfig {
   /**
@@ -127,47 +150,56 @@ export class DeadLetterQueue {
   /**
    * Manually replay a single entry by ID using the provided handler.
    * Marks the entry as replayed on success.
-   * @returns true if replay succeeded, false otherwise.
+   * @returns replay result, including the caught error on handler failure.
    */
-  async replay(id: string, handler: DlqReplayHandler): Promise<boolean> {
+  async replay(id: string, handler: DlqReplayHandler): Promise<DlqReplayResult> {
     const entry = this.entries.find((e) => e.id === id);
-    if (!entry || entry.replayedAt !== null) return false;
+    if (!entry || entry.replayedAt !== null) return { ok: false };
 
     entry.lastRetryAt = new Date().toISOString();
     entry.retryCount++;
     try {
       await handler(entry.event);
       entry.replayedAt = new Date().toISOString();
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (error) {
+      const replayError = normalizeReplayError(error);
+      recordReplayError(entry, replayError);
+      return { ok: false, error: replayError };
     }
   }
 
   /**
    * Attempt to replay all pending entries that have not exceeded `maxRetries`.
    * Uses exponential backoff between retries within each attempt.
-   * @returns counts of successes and failures.
+   * @returns counts of successes and failures, with error details for failures.
    */
-  async retryAll(handler: DlqReplayHandler): Promise<{ success: number; failed: number }> {
+  async retryAll(handler: DlqReplayHandler): Promise<DlqRetryAllResult> {
     const pending = this.entries.filter(
       (e) => e.replayedAt === null && e.retryCount < this.maxRetries
     );
 
     let success = 0;
     let failed = 0;
+    const failures: DlqReplayFailure[] = [];
 
     for (const entry of pending) {
       if (entry.retryCount > 0) {
         const delay = backoffDelay(entry.retryCount, this.retryBaseDelayMs, this.retryMaxDelayMs);
         await sleep(delay);
       }
-      const ok = await this.replay(entry.id, handler);
-      if (ok) success++;
-      else failed++;
+      const result = await this.replay(entry.id, handler);
+      if (result.ok) {
+        success++;
+      } else {
+        failed++;
+        if (result.error) {
+          failures.push({ id: entry.id, event: entry.event, error: result.error });
+        }
+      }
     }
 
-    return { success, failed };
+    return { success, failed, failures };
   }
 
   /**
@@ -208,4 +240,32 @@ function backoffDelay(attempt: number, base: number, cap: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function recordReplayError(entry: DeadLetterEntry, error: Error): void {
+  entry.errorMessage = error.message;
+  entry.lastErrorMessage = error.message;
+  entry.lastErrorName = error.name;
+  entry.lastErrorStack = error.stack;
+}
+
+function normalizeReplayError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(formatThrownValue(error), { cause: error });
+}
+
+function formatThrownValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    const json = JSON.stringify(value);
+    return json ?? String(value);
+  } catch {
+    return String(value);
+  }
 }

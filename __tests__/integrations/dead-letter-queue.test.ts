@@ -33,23 +33,42 @@ describe("DeadLetterQueue", () => {
     it("should mark entry as replayed on success", async () => {
       const dlq = new DeadLetterQueue();
       const entry = dlq.enqueue(makeEvent("1"), "err");
-      const ok = await dlq.replay(entry.id, async () => {});
-      expect(ok).toBe(true);
+      const result = await dlq.replay(entry.id, async () => {});
+      expect(result.ok).toBe(true);
       expect(dlq.listPending()).toHaveLength(0);
     });
 
-    it("should return false on replay failure", async () => {
+    it("should return a failed result on replay failure", async () => {
       const dlq = new DeadLetterQueue();
       const entry = dlq.enqueue(makeEvent("1"), "err");
-      const ok = await dlq.replay(entry.id, async () => {
+      const result = await dlq.replay(entry.id, async () => {
         throw new Error("still failing");
       });
-      expect(ok).toBe(false);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toBe("still failing");
     });
 
-    it("should return false for unknown entry ID", async () => {
+    it("should record and return the latest replay error", async () => {
       const dlq = new DeadLetterQueue();
-      expect(await dlq.replay("nonexistent", async () => {})).toBe(false);
+      const entry = dlq.enqueue(makeEvent("1"), "original error");
+      const latestError = new Error("schema changed");
+
+      const result = await dlq.replay(entry.id, async () => {
+        throw latestError;
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe(latestError);
+      expect(dlq.listPending()[0]).toMatchObject({
+        errorMessage: "schema changed",
+        lastErrorMessage: "schema changed",
+        lastErrorName: "Error",
+      });
+    });
+
+    it("should return a failed result for unknown entry ID", async () => {
+      const dlq = new DeadLetterQueue();
+      await expect(dlq.replay("nonexistent", async () => {})).resolves.toEqual({ ok: false });
     });
   });
 
@@ -73,6 +92,28 @@ describe("DeadLetterQueue", () => {
       const { success, failed } = await dlq.retryAll(async () => {});
       expect(success).toBe(0);
       expect(failed).toBe(0); // entry was excluded from retryAll
+    });
+
+    it("should aggregate replay failures with their errors", async () => {
+      const dlq = new DeadLetterQueue({ maxRetries: 3, retryBaseDelayMs: 0 });
+      dlq.enqueue(makeEvent("1"), "err");
+      dlq.enqueue(makeEvent("2"), "err");
+
+      const result = await dlq.retryAll(async (event) => {
+        throw new Error(`retry failed for ${event.id}`);
+      });
+
+      expect(result.success).toBe(0);
+      expect(result.failed).toBe(2);
+      expect(result.failures).toHaveLength(2);
+      expect(result.failures[0]).toMatchObject({
+        id: expect.any(String),
+        error: expect.objectContaining({ message: "retry failed for 1" }),
+      });
+      expect(result.failures[1]).toMatchObject({
+        id: expect.any(String),
+        error: expect.objectContaining({ message: "retry failed for 2" }),
+      });
     });
   });
 
