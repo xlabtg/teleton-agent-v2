@@ -76,6 +76,7 @@ export interface CradleInterface {
 }
 
 export type AppContainer = AwilixContainer<CradleInterface>;
+type CradleConstructor<T> = new (...args: unknown[]) => T;
 
 export function createAppContainer(config: AppConfig): AppContainer {
   const container = createContainer<CradleInterface>({
@@ -93,8 +94,7 @@ export function createAppContainer(config: AppConfig): AppContainer {
 export function registerAdapter<K extends keyof CradleInterface>(
   container: AppContainer,
   name: K,
-
-  implementation: any
+  implementation: CradleConstructor<CradleInterface[K]>
 ): void {
   container.register(name, asClass(implementation).singleton());
 }
