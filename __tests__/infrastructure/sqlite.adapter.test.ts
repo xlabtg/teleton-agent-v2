@@ -215,6 +215,16 @@ describe("SQLiteMemoryRepository", () => {
 });
 
 describe("SQLite repositories shared connection", () => {
+  it("should configure a busy timeout for contended writes", () => {
+    const connection = new SQLiteConnection(":memory:");
+
+    expect(connection.database.pragma("busy_timeout", { simple: true })).toBe(
+      SQLiteConnection.BUSY_TIMEOUT_MS
+    );
+
+    connection.close();
+  });
+
   it("should reuse one SQLite connection across repository instances", async () => {
     const connection = new SQLiteConnection(":memory:");
     const memoryRepo = new SQLiteMemoryRepository(connection);

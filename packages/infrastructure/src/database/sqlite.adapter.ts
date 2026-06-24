@@ -48,12 +48,15 @@ class SQLiteBase {
 }
 
 export class SQLiteConnection {
+  static readonly BUSY_TIMEOUT_MS = 5_000;
+
   readonly database: Database.Database;
   private closed = false;
 
   constructor(dbPath: string) {
     this.database = new Database(dbPath);
     this.database.pragma("journal_mode = WAL");
+    this.database.pragma(`busy_timeout = ${SQLiteConnection.BUSY_TIMEOUT_MS}`);
     this.database.pragma("foreign_keys = ON");
     sqliteVec.load(this.database);
   }

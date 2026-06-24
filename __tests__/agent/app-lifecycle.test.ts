@@ -1,6 +1,6 @@
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -63,6 +63,32 @@ describe("TeletonApp lifecycle", () => {
     expect(process.listenerCount("SIGINT")).toBe(initialSigintHandlers);
     expect(process.listenerCount("SIGTERM")).toBe(initialSigtermHandlers);
     await expect(fetch(`http://${HOST}:${port}/`)).rejects.toThrow();
+  });
+
+  it("closes the SQLite connection during shutdown", async () => {
+    delete process.env.TELETON_JWT_SECRET;
+    const tempDir = mkdtempSync(join(tmpdir(), "teleton-app-"));
+    tempDirs.push(tempDir);
+    const port = await findFreePort();
+    const app = new TeletonApp({
+      shutdownTimeoutMs: 100,
+      exitProcess: vi.fn((code: number) => {
+        throw new Error(`Unexpected process exit ${code}`);
+      }) as (code: number) => never,
+    });
+    runningApps.push(app);
+
+    const configPath = writeConfig(tempDir, port);
+    const databasePath = join(tempDir, "teleton.db");
+    await app.start(configPath);
+
+    expect(existsSync(`${databasePath}-wal`)).toBe(true);
+    expect(existsSync(`${databasePath}-shm`)).toBe(true);
+
+    await app.stop();
+
+    expect(existsSync(`${databasePath}-wal`)).toBe(false);
+    expect(existsSync(`${databasePath}-shm`)).toBe(false);
   });
 
   it("refuses to start in production when the JWT secret is missing", async () => {
