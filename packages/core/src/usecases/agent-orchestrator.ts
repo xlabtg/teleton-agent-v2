@@ -79,7 +79,21 @@ export class AgentOrchestrator {
     const sorted = pending.sort((a, b) => b.priority.weight - a.priority.weight);
 
     for (const task of sorted) {
-      const result = await this.delegate(task.name, task.payload, task.priority);
+      const agent = this.selectAgent(task);
+      if (!agent) {
+        await this.taskRepository.update(task.id, { status: "failed" });
+        results.push({
+          taskId: task.id,
+          success: false,
+          output: null,
+          error: "No suitable agent found for task",
+          executionTime: 0,
+          agentId: "none",
+        });
+        continue;
+      }
+
+      const result = await this.runtime.executeTask(task, agent);
       results.push(result);
     }
 

@@ -5,6 +5,8 @@ import type { IAgent, Task } from "../../packages/core/src/domain/agent.interfac
 import type { TaskRepository } from "../../packages/core/src/ports/repository.port.js";
 import type { EventBus } from "../../packages/core/src/domain/events.js";
 
+type MockTaskRepository = TaskRepository & { countTasks(): number; listTasks(): Task[] };
+
 function createMockAgent(overrides: Partial<IAgent> = {}): IAgent {
   return {
     id: "test-agent",
@@ -29,7 +31,7 @@ function createMockAgent(overrides: Partial<IAgent> = {}): IAgent {
   };
 }
 
-function createMockTaskRepo(): TaskRepository {
+function createMockTaskRepo(): MockTaskRepository {
   const tasks = new Map<string, Task>();
   return {
     create: vi.fn().mockImplementation(async (data) => {
@@ -43,8 +45,16 @@ function createMockTaskRepo(): TaskRepository {
       return task;
     }),
     findById: vi.fn().mockImplementation(async (id) => tasks.get(id) ?? null),
-    findByStatus: vi.fn().mockResolvedValue([]),
-    findPending: vi.fn().mockResolvedValue([]),
+    findByStatus: vi
+      .fn()
+      .mockImplementation(async (status) =>
+        Array.from(tasks.values()).filter((task) => task.status === status)
+      ),
+    findPending: vi.fn().mockImplementation(async (limit = 10) =>
+      Array.from(tasks.values())
+        .filter((task) => task.status === "pending")
+        .slice(0, limit)
+    ),
     update: vi.fn().mockImplementation(async (id, updates) => {
       const task = tasks.get(id);
       if (!task) throw new Error("not found");
@@ -53,6 +63,8 @@ function createMockTaskRepo(): TaskRepository {
     }),
     storeResult: vi.fn().mockResolvedValue(undefined),
     getResult: vi.fn().mockResolvedValue(null),
+    countTasks: () => tasks.size,
+    listTasks: () => Array.from(tasks.values()),
   };
 }
 
@@ -66,7 +78,7 @@ function createMockEventBus(): EventBus {
 
 describe("AgentOrchestrator", () => {
   let orchestrator: AgentOrchestrator;
-  let taskRepo: TaskRepository;
+  let taskRepo: MockTaskRepository;
   let eventBus: EventBus;
   let runtime: AgentRuntime;
 
@@ -136,5 +148,31 @@ describe("AgentOrchestrator", () => {
     expect(eventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({ type: "task.created" })
     );
+  });
+
+  it("should process pending tasks without creating duplicate tasks", async () => {
+    const agent = createMockAgent();
+    orchestrator.registerAgent(agent);
+
+    const pendingTask = await taskRepo.create({
+      name: "pending-task",
+      payload: { data: "test" },
+      priority: { level: "normal", weight: 50 },
+    });
+    const initialTaskCount = taskRepo.countTasks();
+
+    const results = await orchestrator.processPendingTasks();
+
+    expect(results).toHaveLength(1);
+    expect(results[0].taskId).toBe(pendingTask.id);
+    expect(taskRepo.countTasks()).toBe(initialTaskCount);
+    expect(taskRepo.create).toHaveBeenCalledTimes(1);
+    expect(taskRepo.listTasks()).toEqual([
+      expect.objectContaining({
+        id: pendingTask.id,
+        assignedAgent: agent.id,
+        status: "completed",
+      }),
+    ]);
   });
 });
