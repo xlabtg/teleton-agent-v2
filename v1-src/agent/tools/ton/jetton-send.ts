@@ -12,16 +12,29 @@ const log = createLogger("Tools");
 
 // Jetton transfer op code (TEP-74)
 const JETTON_TRANSFER_OP = 0xf8a7ea5;
+interface TonApiJettonBalance {
+  jetton: {
+    address: string;
+    decimals?: number;
+    symbol?: string;
+  };
+  wallet_address: {
+    address: string;
+  };
+  balance: string;
+}
+
 interface JettonSendParams {
   jetton_address: string;
   to: string;
   amount: number;
   comment?: string;
+  bounce?: boolean;
 }
 export const jettonSendTool: Tool = {
   name: "jetton_send",
   description:
-    "Transfer jetton tokens to a recipient. Amount in human-readable units (e.g. 10 for 10 tokens). Requires jetton master address — use jetton_balances first to find it. For sending TON, use ton_send.",
+    "Transfer jetton tokens to a recipient. Amount in human-readable units (e.g. 10 for 10 tokens). Requires jetton master address — use jetton_balances first to find it. Sends the message to the sender's jetton wallet with bounce=true by default. For sending TON, use ton_send.",
   parameters: Type.Object({
     jetton_address: Type.String({
       description: "Jetton master contract address (EQ... or 0:... format)",
@@ -38,6 +51,12 @@ export const jettonSendTool: Tool = {
         description: "Optional comment/memo to include with the transfer",
       })
     ),
+    bounce: Type.Optional(
+      Type.Boolean({
+        description:
+          "Whether the internal message to the sender's jetton wallet should bounce on rejection. Defaults to true.",
+      })
+    ),
   }),
 };
 export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
@@ -45,7 +64,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
   _context
 ): Promise<ToolResult> => {
   try {
-    const { jetton_address, to, amount, comment } = params;
+    const { jetton_address, to, amount, comment, bounce = true } = params;
 
     const walletData = loadWallet();
     if (!walletData) {
@@ -76,11 +95,10 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
       };
     }
 
-    const jettonsData = await jettonsResponse.json();
+    const jettonsData = (await jettonsResponse.json()) as { balances?: TonApiJettonBalance[] };
 
     // Find the jetton in our balances (safe: skip entries with malformed addresses)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TON API response is untyped
-    const jettonBalance = jettonsData.balances?.find((b: any) => {
+    const jettonBalance = jettonsData.balances?.find((b) => {
       if (b.jetton.address.toLowerCase() === jetton_address.toLowerCase()) return true;
       try {
         return (
@@ -164,7 +182,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
             to: Address.parse(senderJettonWallet),
             value: toNano("0.05"), // Gas for jetton transfer
             body: messageBody,
-            bounce: true,
+            bounce,
           }),
         ],
       });

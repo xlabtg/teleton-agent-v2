@@ -11,11 +11,12 @@ interface SendParams {
   to: string;
   amount: number;
   comment?: string;
+  bounce?: boolean;
 }
 export const tonSendTool: Tool = {
   name: "ton_send",
   description:
-    "Transfer TON to a recipient address. Amount in TON (not nanoTON). Always use a verified address from the user — never guess. Confirm amount and destination before executing. For sending jetton tokens, use jetton_send.",
+    "Transfer TON to a recipient address. Amount in TON (not nanoTON). Always use a verified address from the user — never guess. Confirm amount and destination before executing. Uses non-bounceable transfers by default; set bounce=true only for contracts or initialized recipients that should reject unexpected value. For sending jetton tokens, use jetton_send.",
   parameters: Type.Object({
     to: Type.String({
       description:
@@ -30,6 +31,12 @@ export const tonSendTool: Tool = {
         description: "Optional comment/memo for the transaction",
       })
     ),
+    bounce: Type.Optional(
+      Type.Boolean({
+        description:
+          "Whether the internal message should bounce on recipient rejection. Defaults to false for plain wallet transfers.",
+      })
+    ),
   }),
 };
 export const tonSendExecutor: ToolExecutor<SendParams> = async (
@@ -37,7 +44,7 @@ export const tonSendExecutor: ToolExecutor<SendParams> = async (
   _context
 ): Promise<ToolResult> => {
   try {
-    const { to, amount, comment } = params;
+    const { to, amount, comment, bounce = false } = params;
 
     // Validate address format before attempting transfer
     try {
@@ -57,7 +64,7 @@ export const tonSendExecutor: ToolExecutor<SendParams> = async (
       };
     }
 
-    const txRef = await sendTon({ toAddress: to, amount, comment });
+    const txRef = await sendTon({ toAddress: to, amount, comment, bounce });
 
     if (!txRef) {
       return {
