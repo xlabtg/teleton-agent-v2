@@ -78,15 +78,19 @@ export interface Observation {
   nextAction?: Action;
 }
 
+export interface AgentExecutionOptions {
+  signal?: AbortSignal;
+}
+
 export interface IAgent {
   id: string;
   role: AgentRole;
   capabilities: Capability[];
   constraints: Constraint[];
 
-  think(context: AgentContext): Promise<Thought>;
-  act(thought: Thought): Promise<Action>;
-  observe(result: ActionResult): Promise<Observation>;
+  think(context: AgentContext, options?: AgentExecutionOptions): Promise<Thought>;
+  act(thought: Thought, options?: AgentExecutionOptions): Promise<Action>;
+  observe(result: ActionResult, options?: AgentExecutionOptions): Promise<Observation>;
 }
 
 export interface TaskPriority {
