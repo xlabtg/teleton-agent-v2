@@ -117,7 +117,7 @@ export class AgentRuntime {
     const context: AgentContext = {
       sessionId: crypto.randomUUID(),
       userId: "direct",
-      conversationHistory: messages,
+      conversationHistory: [...messages],
       memory: [],
       availableTools: this.getRegisteredTools(),
       timestamp: new Date(),
