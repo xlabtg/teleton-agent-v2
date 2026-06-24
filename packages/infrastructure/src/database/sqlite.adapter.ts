@@ -91,10 +91,6 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
         content='memory_entries',
         content_rowid='rowid'
       );
-
-      CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(
-        embedding float[1]
-      );
     `);
   }
 
@@ -103,19 +99,37 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
    * Called lazily on first vector operation when we know the actual dimension.
    */
   private ensureVecTable(dim: number): void {
-    // Check current table definition via sqlite_master
     const row = this.db
       .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_vec'`)
       .get() as { sql: string } | undefined;
 
-    const expected = `float[${dim}]`;
-    if (!row || !row.sql.includes(expected)) {
-      // Drop and recreate with the correct dimension
-      this.db.exec(`
-        DROP TABLE IF EXISTS memory_vec;
-        CREATE VIRTUAL TABLE memory_vec USING vec0(embedding float[${dim}]);
-      `);
+    if (!row) {
+      this.db.exec(`CREATE VIRTUAL TABLE memory_vec USING vec0(embedding float[${dim}])`);
+      return;
     }
+
+    const actualDim = this.getVecTableDimension(row.sql);
+    if (actualDim !== dim) {
+      throw new Error(
+        `memory_vec embedding dimension mismatch: table uses ${actualDim}, requested ${dim}. ` +
+          "Refusing to recreate the vector table implicitly because that would delete existing embeddings."
+      );
+    }
+  }
+
+  private getVecTableDimension(sql: string): number {
+    const match = sql.match(/embedding\s+float\[(\d+)\]/i);
+    if (!match) {
+      throw new Error("Unable to determine memory_vec embedding dimension from sqlite schema");
+    }
+    return Number(match[1]);
+  }
+
+  private hasVecTable(): boolean {
+    const row = this.db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_vec'`)
+      .get();
+    return Boolean(row);
   }
 
   async store(entry: Omit<MemoryEntry, "id">): Promise<MemoryEntry> {
@@ -249,7 +263,9 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
     if (!row) return;
 
     this.db.prepare(`DELETE FROM memory_entries_fts WHERE rowid = ?`).run(row.rowid);
-    this.db.prepare(`DELETE FROM memory_vec WHERE rowid = ?`).run(BigInt(row.rowid));
+    if (this.hasVecTable()) {
+      this.db.prepare(`DELETE FROM memory_vec WHERE rowid = ?`).run(BigInt(row.rowid));
+    }
     this.db.prepare(`DELETE FROM memory_entries WHERE id = ?`).run(id);
   }
 
@@ -260,7 +276,9 @@ export class SQLiteMemoryRepository extends SQLiteBase implements MemoryReposito
 
     for (const row of rows) {
       this.db.prepare(`DELETE FROM memory_entries_fts WHERE rowid = ?`).run(row.rowid);
-      this.db.prepare(`DELETE FROM memory_vec WHERE rowid = ?`).run(BigInt(row.rowid));
+      if (this.hasVecTable()) {
+        this.db.prepare(`DELETE FROM memory_vec WHERE rowid = ?`).run(BigInt(row.rowid));
+      }
     }
     const result = this.db
       .prepare(`DELETE FROM memory_entries WHERE accessed_at < ?`)

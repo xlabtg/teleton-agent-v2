@@ -122,6 +122,17 @@ describe("SQLiteMemoryRepository", () => {
     expect(results.every((r) => r.content !== "no embedding")).toBe(true);
   });
 
+  it("should reject embedding dimension changes without dropping existing vectors", async () => {
+    const entry = await repo.store(makeEntry({ content: "kept vector", embedding: [1, 0] }));
+
+    await expect(
+      repo.store(makeEntry({ content: "wrong dimension", embedding: [1, 0, 0] }))
+    ).rejects.toThrow(/memory_vec embedding dimension mismatch/i);
+
+    const results = await repo.searchByEmbedding([1, 0], 10);
+    expect(results.map((result) => result.id)).toContain(entry.id);
+  });
+
   // -- update ----------------------------------------------------------------
 
   it("should update an existing entry", async () => {
