@@ -19,8 +19,9 @@ describe("cosineSimilarity", () => {
     expect(() => cosineSimilarity([1, 2], [1, 2, 3])).toThrow("dimension mismatch");
   });
 
-  it("should return 0 for zero vectors", () => {
-    expect(cosineSimilarity([0, 0], [1, 2])).toBe(0);
+  it("should return NaN for zero-magnitude vectors", () => {
+    expect(cosineSimilarity([0, 0], [1, 2])).toBeNaN();
+    expect(cosineSimilarity([1, 2], [0, 0])).toBeNaN();
   });
 });
 
@@ -50,6 +51,33 @@ describe("InMemoryVectorStore", () => {
     const results = await store.search([1, 0, 0], 10, 0.5);
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("a");
+  });
+
+  it("should keep negative-similarity matches when no threshold is set", async () => {
+    await store.insert({ id: "opposite", embedding: [-1, 0, 0] });
+    await store.insert({ id: "less-opposite", embedding: [-0.5, -0.5, 0] });
+
+    const results = await store.search([1, 0, 0], 10);
+    expect(results.map((result) => result.id)).toEqual(["less-opposite", "opposite"]);
+    expect(results[0].score).toBeLessThan(0);
+    expect(results[1].score).toBeCloseTo(-1.0);
+  });
+
+  it("should skip zero-vector entries instead of ranking them as zero similarity", async () => {
+    await store.insert({ id: "zero", embedding: [0, 0, 0] });
+    await store.insert({ id: "opposite", embedding: [-1, 0, 0] });
+
+    const results = await store.search([1, 0, 0], 10);
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe("opposite");
+    expect(results[0].score).toBeCloseTo(-1.0);
+  });
+
+  it("should return no results for a zero-vector query", async () => {
+    await store.insert({ id: "a", embedding: [1, 0, 0] });
+    await store.insert({ id: "b", embedding: [-1, 0, 0] });
+
+    await expect(store.search([0, 0, 0], 10)).resolves.toEqual([]);
   });
 
   it("should reject wrong dimensions on insert", async () => {
