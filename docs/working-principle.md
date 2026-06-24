@@ -719,7 +719,7 @@ api:
   cors: ["http://localhost:5173"]
 
 security:
-  jwt_secret: "…" # Auto-generated if omitted
+  jwt_secret: "…" # Stable high-entropy value, minimum 32 chars; required in production
   rate_limit_window: 900000 # ms (15 min)
   rate_limit_max: 100
 

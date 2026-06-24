@@ -4,6 +4,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -16,10 +17,11 @@ import {
 } from "@teleton/infrastructure/database/sqlite.adapter.js";
 import { InMemoryEventBus } from "@teleton/infrastructure/events/in-memory-event-bus.js";
 import { createServer, startServer, type ServerHandle } from "@teleton/api/server.js";
-import { appConfigSchema } from "../../../configs/config.schema.js";
+import { appConfigSchema, jwtSecretSchema } from "../../../configs/config.schema.js";
 import { createAgentServerConfig } from "./server-config.js";
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+const JWT_SECRET_ENV_VAR = "TELETON_JWT_SECRET";
 
 interface CloseableResource {
   name: string;
@@ -29,6 +31,56 @@ interface CloseableResource {
 export interface TeletonAppOptions {
   shutdownTimeoutMs?: number;
   exitProcess?: (code: number) => never;
+}
+
+function resolveJwtSecret(configuredSecret: string | undefined, runtimeEnv: string): string {
+  if (configuredSecret !== undefined) {
+    return configuredSecret;
+  }
+
+  if (runtimeEnv === "production") {
+    throw new Error(
+      `security.jwt_secret or ${JWT_SECRET_ENV_VAR} is required in production and must be ` +
+        "a stable, high-entropy value with at least 32 characters"
+    );
+  }
+
+  console.warn(
+    "WARNING: security.jwt_secret is not configured. Using an ephemeral development JWT secret; " +
+      "tokens issued by this process will be invalid after restart. Set security.jwt_secret or " +
+      `${JWT_SECRET_ENV_VAR} to a stable high-entropy value before production.`
+  );
+
+  return randomBytes(32).toString("base64url");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function applyJwtSecretEnvOverride(parsed: unknown): unknown {
+  const envSecret = process.env[JWT_SECRET_ENV_VAR];
+  if (envSecret === undefined) {
+    return parsed;
+  }
+
+  const jwtSecret = jwtSecretSchema.parse(envSecret);
+  if (!isRecord(parsed)) {
+    return parsed;
+  }
+
+  const existingSecurity = parsed.security;
+  if (existingSecurity !== undefined && !isRecord(existingSecurity)) {
+    return parsed;
+  }
+
+  return {
+    ...parsed,
+    security: {
+      ...(existingSecurity ?? {}),
+      jwt_secret: jwtSecret,
+    },
+  };
 }
 
 export class TeletonApp {
@@ -197,7 +249,9 @@ export class TeletonApp {
       if (existsSync(p)) {
         const raw = readFileSync(p, "utf-8");
         const parsed = parseYaml(raw);
-        const validated = appConfigSchema.parse(parsed);
+        const validated = appConfigSchema.parse(applyJwtSecretEnvOverride(parsed));
+        const runtimeEnv = process.env.NODE_ENV ?? "development";
+        const jwtSecret = resolveJwtSecret(validated.security.jwt_secret, runtimeEnv);
 
         // Map YAML snake_case to camelCase config
         return {
@@ -233,7 +287,7 @@ export class TeletonApp {
               : undefined,
           },
           security: {
-            jwtSecret: validated.security.jwt_secret ?? crypto.randomUUID(),
+            jwtSecret,
             rateLimitWindow: validated.security.rate_limit_window,
             rateLimitMax: validated.security.rate_limit_max,
           },
