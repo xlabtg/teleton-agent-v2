@@ -16,6 +16,26 @@ describe("InputValidator", () => {
     expect(() => v.validate("123456")).toThrow(ValidationError);
   });
 
+  it("enforces maxInputLength as UTF-8 bytes for multi-byte input", () => {
+    const v = new InputValidator({ maxInputLength: 5 });
+    expect(() => v.validate("ééé")).toThrow(ValidationError);
+
+    const result = v.runSyntaxStage("ééé");
+    expect(result.passed).toBe(false);
+    expect(result.errors).toEqual(["Input exceeds maximum length of 5 bytes"]);
+    expect(result.annotations["originalByteLength"]).toBe(6);
+  });
+
+  it("enforces maxInputLength as UTF-8 bytes for astral-plane input", () => {
+    const v = new InputValidator({ maxInputLength: 7 });
+    expect(() => v.validate("🙂🙂")).toThrow(ValidationError);
+
+    const result = v.runSyntaxStage("🙂🙂");
+    expect(result.passed).toBe(false);
+    expect(result.annotations["originalLength"]).toBe(4);
+    expect(result.annotations["originalByteLength"]).toBe(8);
+  });
+
   it("strips null bytes and control characters", () => {
     const v = new InputValidator();
     const result = v.validate("hello\x00\x01world");
