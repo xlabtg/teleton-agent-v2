@@ -70,6 +70,41 @@ describe("ExecutionPipeline", () => {
     expect(store.listCheckpoints(state.id).length).toBe(2);
   });
 
+  it("should resume from the latest checkpoint without re-executing completed steps", async () => {
+    const store = new InMemoryCheckpointStore();
+    const pipeline = new ExecutionPipeline({ checkpointStore: store });
+    const state = pipeline.create({
+      name: "resume-pipe",
+      context: { input: "original" },
+      steps: [{ name: "prepare" }, { name: "finish", dependsOn: ["prepare"] }],
+    });
+    const initialExecutor = vi.fn(async (name: string) => {
+      if (name === "finish") throw new Error("interrupted");
+      return "prepared";
+    });
+
+    await pipeline.run(state, initialExecutor);
+
+    expect(state.status).toBe("failed");
+    expect(initialExecutor).toHaveBeenCalledTimes(2);
+    expect(store.listCheckpoints(state.id).length).toBe(1);
+
+    const resumeExecutor = vi.fn(async (name: string, context: Record<string, unknown>) => {
+      expect(name).toBe("finish");
+      expect(context["step.prepare.output"]).toBe("prepared");
+      return "finished";
+    });
+
+    const resumed = await pipeline.resume(state.id, resumeExecutor);
+
+    expect(resumed.status).toBe("completed");
+    expect(resumed.steps).toBeInstanceOf(Map);
+    expect(resumed.steps.get("prepare")?.status).toBe("completed");
+    expect(resumed.steps.get("finish")?.status).toBe("completed");
+    expect(resumed.context["step.finish.output"]).toBe("finished");
+    expect(resumeExecutor).toHaveBeenCalledTimes(1);
+  });
+
   it("should not retry or fail a completed step when checkpoint save throws", async () => {
     class ThrowingCheckpointStore implements CheckpointStore {
       save(): void {
