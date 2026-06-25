@@ -15,6 +15,12 @@ import { CorrectionHistory } from "./correction-history.js";
 
 export type OperationFn<T> = (context: Record<string, unknown>) => Promise<T>;
 
+const INTERNAL_CONTEXT_KEYS = new Set([
+  "_rateLimitBackoffMs",
+  "_needsRephrase",
+  "_relaxConstraints",
+]);
+
 export interface SelfCorrectionConfig {
   /**
    * Absolute maximum retries regardless of error category or strategy
@@ -83,7 +89,7 @@ export class SelfCorrection {
 
     for (let attempt = 1; attempt <= this.maxRetries + 1; attempt++) {
       try {
-        const output = await operation(context);
+        const output = await operation(this.toOperationContext(context));
 
         // Record success if this wasn't the first attempt.
         if (attempt > 1) {
@@ -159,8 +165,10 @@ export class SelfCorrection {
         corrections.push(correctionResult.description);
 
         // Honour rate-limit backoff hint if set.
+        const rateLimitBackoffMs = context["_rateLimitBackoffMs"] as number | undefined;
+        context = this.toOperationContext(context);
         const backoffMs =
-          (context["_rateLimitBackoffMs"] as number | undefined) ??
+          rateLimitBackoffMs ??
           (classification.category === "timeout" || classification.category === "network"
             ? Math.min(30_000, 500 * Math.pow(2, attempt - 1))
             : 0);
@@ -182,5 +190,11 @@ export class SelfCorrection {
   /** Expose the underlying history store for inspection. */
   get correctionHistory(): CorrectionHistory {
     return this.history;
+  }
+
+  private toOperationContext(context: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(context).filter(([key]) => !INTERNAL_CONTEXT_KEYS.has(key))
+    );
   }
 }
