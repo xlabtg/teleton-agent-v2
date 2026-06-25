@@ -5,21 +5,17 @@ import type { MemoryEntry } from "../../packages/core/src/domain/agent.interface
 import type { MemoryRepository } from "../../packages/core/src/ports/repository.port.js";
 import type { EmbeddingProvider } from "../../packages/core/src/ports/service.port.js";
 
+function createTestEmbedding(text: string): number[] {
+  const hash = Array.from(text).reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return [Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)];
+}
+
 function createMockEmbeddingProvider(): EmbeddingProvider {
   return {
-    embed: vi.fn().mockImplementation(async (text: string) => {
-      // Simple hash-like embedding for testing
-      const hash = Array.from(text).reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      return [Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)];
-    }),
-    embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
-      const results: number[][] = [];
-      for (const text of texts) {
-        const hash = Array.from(text).reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        results.push([Math.sin(hash), Math.cos(hash), Math.sin(hash * 2)]);
-      }
-      return results;
-    }),
+    embed: vi.fn().mockImplementation(async (text: string) => createTestEmbedding(text)),
+    embedBatch: vi
+      .fn()
+      .mockImplementation(async (texts: string[]) => texts.map(createTestEmbedding)),
     dimensions: vi.fn().mockReturnValue(3),
   };
 }
@@ -135,6 +131,47 @@ describe("SemanticSearch", () => {
     await search.indexBatch(entries);
     expect(vectorStore.size()).toBe(2);
     expect(embeddingProvider.embedBatch).toHaveBeenCalled();
+  });
+
+  it("should batch-index large mixed batches without repeated indexOf lookups", async () => {
+    const batchSize = 2000;
+    const entries: MemoryEntry[] = Array.from({ length: batchSize }, (_, i) => ({
+      id: `m${i}`,
+      content: `Memory ${i}`,
+      embedding: i % 3 === 0 ? [i, i + 1, i + 2] : undefined,
+      importance: 0.5,
+      createdAt: new Date(),
+      accessedAt: new Date(),
+      tags: [`tag-${i}`],
+    }));
+    const insertedEntries: Array<{ id: string; embedding: number[] }> = [];
+
+    vi.spyOn(vectorStore, "insertBatch").mockImplementation(async (batch) => {
+      insertedEntries.push(...batch);
+    });
+
+    const indexOfSpy = vi.spyOn(Array.prototype, "indexOf");
+    try {
+      await search.indexBatch(entries);
+    } finally {
+      indexOfSpy.mockRestore();
+    }
+
+    expect(indexOfSpy).not.toHaveBeenCalled();
+    expect(embeddingProvider.embedBatch).toHaveBeenCalledWith(
+      entries.filter((entry) => !entry.embedding).map((entry) => entry.content)
+    );
+    expect(insertedEntries).toHaveLength(batchSize);
+    expect(insertedEntries[0]).toMatchObject({ id: "m0", embedding: [0, 1, 2] });
+    expect(insertedEntries[1]).toMatchObject({
+      id: "m1",
+      embedding: createTestEmbedding("Memory 1"),
+    });
+    expect(insertedEntries[3]).toMatchObject({ id: "m3", embedding: [3, 4, 5] });
+    expect(insertedEntries[1999]).toMatchObject({
+      id: "m1999",
+      embedding: createTestEmbedding("Memory 1999"),
+    });
   });
 
   it("should remove from index", async () => {
