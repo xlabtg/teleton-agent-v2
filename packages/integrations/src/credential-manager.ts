@@ -4,6 +4,7 @@
  * zero-downtime rotation support. Credentials are never logged or serialised.
  */
 
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { ConfigurationError, NotFoundError } from "../../core/src/errors/domain-errors.js";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,23 @@ export interface CredentialRecord {
   meta?: Record<string, unknown>;
 }
 
+interface StoredCredentialRecord {
+  serviceId: string;
+  stored: StoredCredentialValue;
+  rotatedAt: string;
+  meta?: Record<string, unknown>;
+}
+
+type StoredCredentialValue =
+  | { kind: "plain"; value: unknown }
+  | { kind: "encrypted"; payload: EncryptedCredentialPayload };
+
+interface EncryptedCredentialPayload {
+  iv: string;
+  authTag: string;
+  ciphertext: string;
+}
+
 export interface CredentialManagerConfig {
   /**
    * Initial credential map.  Keys are service IDs; values are opaque credentials.
@@ -33,6 +51,11 @@ export interface CredentialManagerConfig {
    * Defaults to "TELETON_CRED".
    */
   envPrefix?: string;
+  /**
+   * Optional key used to encrypt credentials while stored in memory.
+   * When omitted, values are still defensively cloned and frozen.
+   */
+  encryptionKey?: string | Uint8Array;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,11 +72,15 @@ export interface CredentialManagerConfig {
  * const cred = mgr.get("openai");
  */
 export class CredentialManager {
-  private readonly records = new Map<string, CredentialRecord>();
+  private readonly records = new Map<string, StoredCredentialRecord>();
   private readonly envPrefix: string;
+  private readonly encryptionKey?: Buffer;
 
   constructor(config: CredentialManagerConfig = {}) {
     this.envPrefix = config.envPrefix ?? "TELETON_CRED";
+    this.encryptionKey = config.encryptionKey
+      ? deriveEncryptionKey(config.encryptionKey)
+      : undefined;
     if (config.initial) {
       for (const [serviceId, value] of Object.entries(config.initial)) {
         this._store(serviceId, value);
@@ -80,7 +107,7 @@ export class CredentialManager {
     if (!record) {
       throw new NotFoundError("Credential", serviceId);
     }
-    return record.value;
+    return freezeDeep(cloneCredential(this._readStoredValue(record.stored)));
   }
 
   /**
@@ -92,7 +119,12 @@ export class CredentialManager {
     if (!record) {
       throw new NotFoundError("Credential", serviceId);
     }
-    return record;
+    return freezeDeep({
+      serviceId: record.serviceId,
+      value: this._readStoredValue(record.stored),
+      rotatedAt: record.rotatedAt,
+      ...(record.meta ? { meta: cloneCredential(record.meta) } : {}),
+    });
   }
 
   /** Return true if a credential is registered for the given service. */
@@ -132,10 +164,54 @@ export class CredentialManager {
   private _store(serviceId: string, value: unknown, meta?: Record<string, unknown>): void {
     this.records.set(normalise(serviceId), {
       serviceId: normalise(serviceId),
-      value,
+      stored: this._writeStoredValue(value),
       rotatedAt: new Date().toISOString(),
-      ...(meta ? { meta } : {}),
+      ...(meta ? { meta: freezeDeep(cloneCredential(meta)) as Record<string, unknown> } : {}),
     });
+  }
+
+  private _writeStoredValue(value: unknown): StoredCredentialValue {
+    const cloned = cloneCredential(value);
+    if (!this.encryptionKey) {
+      return { kind: "plain", value: freezeDeep(cloned) };
+    }
+
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.encryptionKey, iv);
+    const plaintext = Buffer.from(JSON.stringify(cloned), "utf8");
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+
+    return {
+      kind: "encrypted",
+      payload: {
+        iv: iv.toString("base64url"),
+        authTag: cipher.getAuthTag().toString("base64url"),
+        ciphertext: ciphertext.toString("base64url"),
+      },
+    };
+  }
+
+  private _readStoredValue(stored: StoredCredentialValue): unknown {
+    if (stored.kind === "plain") {
+      return cloneCredential(stored.value);
+    }
+
+    if (!this.encryptionKey) {
+      throw new ConfigurationError("Credential encryption key is required to decrypt credential.");
+    }
+
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      this.encryptionKey,
+      Buffer.from(stored.payload.iv, "base64url")
+    );
+    decipher.setAuthTag(Buffer.from(stored.payload.authTag, "base64url"));
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(stored.payload.ciphertext, "base64url")),
+      decipher.final(),
+    ]);
+
+    return JSON.parse(plaintext.toString("utf8")) as unknown;
   }
 
   private _loadFromEnv(): void {
@@ -165,4 +241,28 @@ function validateServiceId(serviceId: string): void {
   if (!serviceId || serviceId.trim().length === 0) {
     throw new ConfigurationError("Service ID must be a non-empty string.");
   }
+}
+
+function deriveEncryptionKey(key: string | Uint8Array): Buffer {
+  return createHash("sha256").update(key).digest();
+}
+
+function cloneCredential<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function freezeDeep<T>(value: T): T {
+  if (!isFreezable(value) || Object.isFrozen(value)) {
+    return value;
+  }
+
+  for (const nested of Object.values(value)) {
+    freezeDeep(nested);
+  }
+
+  return Object.freeze(value);
+}
+
+function isFreezable(value: unknown): value is Record<string, unknown> {
+  return (typeof value === "object" || typeof value === "function") && value !== null;
 }
