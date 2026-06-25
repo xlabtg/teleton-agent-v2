@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { ErrorClassifier } from "../../packages/agents/src/error-classifier.js";
 import { CorrectionStrategyRegistry } from "../../packages/agents/src/correction-strategies.js";
 import { CorrectionHistory } from "../../packages/agents/src/correction-history.js";
 import { SelfCorrection } from "../../packages/agents/src/self-correction.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // ── ErrorClassifier ──────────────────────────────────────────────────────────
 
@@ -247,6 +251,41 @@ describe("SelfCorrection", () => {
     expect(result.success).toBe(false);
     expect(calls).toBe(2); // initial + classifier-suggested 1 retry
     expect(result.attempts).toBe(2);
+  });
+
+  it("should consume rate-limit backoff hints before later unrelated retries", async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const sc = new SelfCorrection({ maxRetries: 3 });
+    const contexts: Record<string, unknown>[] = [];
+    let calls = 0;
+
+    const runPromise = sc.run("op", async (context) => {
+      contexts.push({ ...context });
+      calls++;
+
+      if (calls === 1) throw new Error("429 Too Many Requests");
+      if (calls === 2) throw new Error("Request timed out");
+      return "recovered";
+    });
+
+    await vi.waitFor(() => expect(setTimeoutSpy).toHaveBeenCalledTimes(1));
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 2_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await vi.waitFor(() => expect(setTimeoutSpy).toHaveBeenCalledTimes(2));
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const result = await runPromise;
+
+    expect(result.success).toBe(true);
+    expect(result.attempts).toBe(3);
+    expect(contexts).toHaveLength(3);
+    expect(contexts[1]).not.toHaveProperty("_rateLimitBackoffMs");
+    expect(contexts[2]).not.toHaveProperty("_rateLimitBackoffMs");
+    expect(contexts[2]).not.toHaveProperty("_needsRephrase");
+    expect(contexts[2]).not.toHaveProperty("_relaxConstraints");
   });
 
   it("should open circuit breaker after threshold failures", async () => {
