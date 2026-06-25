@@ -2,8 +2,8 @@
  * Time Parser — V2-11.
  * Resolves relative and absolute temporal expressions to concrete Date objects.
  * Handles common natural language patterns without an external NLP dependency.
- * All internal calculations are performed in UTC; caller may supply a timezone
- * offset for user-facing display.
+ * Date objects are returned as UTC instants. Absolute wall-clock expressions are
+ * interpreted in the caller's configured UTC offset before conversion to UTC.
  */
 
 export type ParsedTime =
@@ -83,11 +83,43 @@ const MONTH_INDEX: Record<string, number> = {
   december: 11,
 };
 
-function startOfDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+function toUserWallClock(d: Date, userUtcOffsetMinutes: number): Date {
+  return new Date(d.getTime() + userUtcOffsetMinutes * 60_000);
 }
 
-function applyTimeOfDay(base: Date, expr: string): Date {
+function fromUserWallClock(
+  year: number,
+  month: number,
+  day: number,
+  hours: number,
+  minutes: number,
+  userUtcOffsetMinutes: number
+): Date {
+  return new Date(Date.UTC(year, month, day, hours, minutes, 0, 0) - userUtcOffsetMinutes * 60_000);
+}
+
+function isValidWallClockDate(year: number, month: number, day: number): boolean {
+  const candidate = new Date(Date.UTC(year, month, day));
+  return (
+    candidate.getUTCFullYear() === year &&
+    candidate.getUTCMonth() === month &&
+    candidate.getUTCDate() === day
+  );
+}
+
+function startOfDay(d: Date, userUtcOffsetMinutes: number): Date {
+  const wallClock = toUserWallClock(d, userUtcOffsetMinutes);
+  return fromUserWallClock(
+    wallClock.getUTCFullYear(),
+    wallClock.getUTCMonth(),
+    wallClock.getUTCDate(),
+    0,
+    0,
+    userUtcOffsetMinutes
+  );
+}
+
+function applyTimeOfDay(base: Date, expr: string, userUtcOffsetMinutes: number): Date {
   const m = expr.match(TIME_OF_DAY_RE);
   if (!m) return base;
   let hours = parseInt(m[1], 10);
@@ -95,23 +127,43 @@ function applyTimeOfDay(base: Date, expr: string): Date {
   const meridiem = m[3]?.toLowerCase();
   if (meridiem === "pm" && hours < 12) hours += 12;
   if (meridiem === "am" && hours === 12) hours = 0;
-  const result = new Date(base);
-  result.setUTCHours(hours, minutes, 0, 0);
-  return result;
+  const wallClock = toUserWallClock(base, userUtcOffsetMinutes);
+  return fromUserWallClock(
+    wallClock.getUTCFullYear(),
+    wallClock.getUTCMonth(),
+    wallClock.getUTCDate(),
+    hours,
+    minutes,
+    userUtcOffsetMinutes
+  );
 }
 
-function nextWeekday(from: Date, targetDay: number): Date {
-  const d = new Date(from);
+function nextWeekday(from: Date, targetDay: number, userUtcOffsetMinutes: number): Date {
+  const d = toUserWallClock(from, userUtcOffsetMinutes);
   const diff = (targetDay - d.getUTCDay() + 7) % 7 || 7;
   d.setUTCDate(d.getUTCDate() + diff);
-  return startOfDay(d);
+  return fromUserWallClock(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    0,
+    0,
+    userUtcOffsetMinutes
+  );
 }
 
-function prevWeekday(from: Date, targetDay: number): Date {
-  const d = new Date(from);
+function prevWeekday(from: Date, targetDay: number, userUtcOffsetMinutes: number): Date {
+  const d = toUserWallClock(from, userUtcOffsetMinutes);
   const diff = (d.getUTCDay() - targetDay + 7) % 7 || 7;
   d.setUTCDate(d.getUTCDate() - diff);
-  return startOfDay(d);
+  return fromUserWallClock(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    0,
+    0,
+    userUtcOffsetMinutes
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,9 +180,11 @@ function prevWeekday(from: Date, targetDay: number): Date {
  */
 export class TimeParser {
   private readonly ref: Date;
+  private readonly userUtcOffsetMinutes: number;
 
   constructor(config: TimeParserConfig = {}) {
     this.ref = config.referenceDate ?? new Date();
+    this.userUtcOffsetMinutes = config.userUtcOffsetMinutes ?? 0;
   }
 
   /** Return the reference "now" this parser uses. */
@@ -151,7 +205,11 @@ export class TimeParser {
       const n = parseInt(inMatch[1], 10);
       const unit = inMatch[2].toLowerCase();
       const offsetMs = n * UNIT_MS[unit];
-      const date = applyTimeOfDay(new Date(this.ref.getTime() + offsetMs), normalised);
+      const date = applyTimeOfDay(
+        new Date(this.ref.getTime() + offsetMs),
+        normalised,
+        this.userUtcOffsetMinutes
+      );
       return { kind: "relative", date, raw: normalised, offsetMs };
     }
 
@@ -187,12 +245,12 @@ export class TimeParser {
       const day = WEEKDAY_INDEX[weekdayMatch[2].toLowerCase()];
       let date: Date;
       if (modifier === "last") {
-        date = prevWeekday(this.ref, day);
+        date = prevWeekday(this.ref, day, this.userUtcOffsetMinutes);
       } else {
         // "next" or bare weekday → upcoming occurrence
-        date = nextWeekday(this.ref, day);
+        date = nextWeekday(this.ref, day, this.userUtcOffsetMinutes);
       }
-      date = applyTimeOfDay(date, normalised);
+      date = applyTimeOfDay(date, normalised, this.userUtcOffsetMinutes);
       return {
         kind: "relative",
         date,
@@ -204,9 +262,14 @@ export class TimeParser {
     // 5. ISO / compact dates
     const isoMatch = normalised.match(ISO_DATE_RE);
     if (isoMatch) {
+      const [year, month, day] = isoMatch[1]
+        .replace(/\//g, "-")
+        .split("-")
+        .map((part) => parseInt(part, 10));
       const date = applyTimeOfDay(
-        new Date(isoMatch[1].replace(/\//g, "-") + "T00:00:00Z"),
-        normalised
+        fromUserWallClock(year, month - 1, day, 0, 0, this.userUtcOffsetMinutes),
+        normalised,
+        this.userUtcOffsetMinutes
       );
       return { kind: "absolute", date, raw: normalised };
     }
@@ -216,8 +279,15 @@ export class TimeParser {
     if (monthMatch) {
       const month = MONTH_INDEX[monthMatch[1].toLowerCase()];
       const day = parseInt(monthMatch[2], 10);
-      const year = monthMatch[3] ? parseInt(monthMatch[3], 10) : this.ref.getUTCFullYear();
-      const date = applyTimeOfDay(new Date(Date.UTC(year, month, day)), normalised);
+      const referenceWallClock = toUserWallClock(this.ref, this.userUtcOffsetMinutes);
+      const year = monthMatch[3]
+        ? parseInt(monthMatch[3], 10)
+        : referenceWallClock.getUTCFullYear();
+      const date = applyTimeOfDay(
+        fromUserWallClock(year, month, day, 0, 0, this.userUtcOffsetMinutes),
+        normalised,
+        this.userUtcOffsetMinutes
+      );
       return { kind: "absolute", date, raw: normalised };
     }
 
@@ -229,10 +299,10 @@ export class TimeParser {
       let y = parseInt(compactMatch[3], 10);
       if (y < 100) y += 2000;
       // Ambiguous: could be MM/DD or DD/MM
-      const candidate1 = new Date(Date.UTC(y, a - 1, b));
-      const candidate2 = new Date(Date.UTC(y, b - 1, a));
-      const valid1 = !isNaN(candidate1.getTime()) && candidate1.getUTCMonth() === a - 1;
-      const valid2 = !isNaN(candidate2.getTime()) && candidate2.getUTCMonth() === b - 1;
+      const valid1 = isValidWallClockDate(y, a - 1, b);
+      const valid2 = isValidWallClockDate(y, b - 1, a);
+      const candidate1 = fromUserWallClock(y, a - 1, b, 0, 0, this.userUtcOffsetMinutes);
+      const candidate2 = fromUserWallClock(y, b - 1, a, 0, 0, this.userUtcOffsetMinutes);
       if (valid1 && valid2 && a !== b) {
         return {
           kind: "ambiguous",
@@ -242,9 +312,17 @@ export class TimeParser {
         };
       }
       if (valid1)
-        return { kind: "absolute", date: applyTimeOfDay(candidate1, normalised), raw: normalised };
+        return {
+          kind: "absolute",
+          date: applyTimeOfDay(candidate1, normalised, this.userUtcOffsetMinutes),
+          raw: normalised,
+        };
       if (valid2)
-        return { kind: "absolute", date: applyTimeOfDay(candidate2, normalised), raw: normalised };
+        return {
+          kind: "absolute",
+          date: applyTimeOfDay(candidate2, normalised, this.userUtcOffsetMinutes),
+          raw: normalised,
+        };
     }
 
     return { kind: "unrecognized", raw: normalised };
@@ -303,22 +381,22 @@ export class TimeParser {
   // ---------------------------------------------------------------------------
 
   private _resolveNamed(term: string, full: string): Date | null {
-    const today = startOfDay(this.ref);
+    const today = startOfDay(this.ref, this.userUtcOffsetMinutes);
 
     switch (term) {
       case "now":
         return new Date(this.ref);
       case "today":
-        return applyTimeOfDay(today, full);
+        return applyTimeOfDay(today, full, this.userUtcOffsetMinutes);
       case "tomorrow": {
         const d = new Date(today);
         d.setUTCDate(d.getUTCDate() + 1);
-        return applyTimeOfDay(d, full);
+        return applyTimeOfDay(d, full, this.userUtcOffsetMinutes);
       }
       case "yesterday": {
         const d = new Date(today);
         d.setUTCDate(d.getUTCDate() - 1);
-        return applyTimeOfDay(d, full);
+        return applyTimeOfDay(d, full, this.userUtcOffsetMinutes);
       }
       case "next week": {
         const d = new Date(today);

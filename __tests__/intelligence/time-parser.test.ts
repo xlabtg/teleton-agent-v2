@@ -7,6 +7,10 @@ function parser() {
   return new TimeParser({ referenceDate: REF });
 }
 
+function parserWithOffset(userUtcOffsetMinutes: number) {
+  return new TimeParser({ referenceDate: REF, userUtcOffsetMinutes });
+}
+
 describe("TimeParser", () => {
   describe("relative: 'in N unit'", () => {
     it("should resolve 'in 2 hours'", () => {
@@ -145,6 +149,38 @@ describe("TimeParser", () => {
       const result = parser().parse("tomorrow at 3pm");
       if (result.kind === "relative") {
         expect(result.date.getUTCHours()).toBe(15);
+      }
+    });
+
+    it("should interpret 9am in UTC+8 as 01:00 UTC", () => {
+      const result = parserWithOffset(480).parse("tomorrow at 9am");
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-06-16T01:00:00.000Z");
+      }
+    });
+
+    it("should interpret 9am in UTC-5 as 14:00 UTC", () => {
+      const result = parserWithOffset(-300).parse("tomorrow at 9am");
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-06-16T14:00:00.000Z");
+      }
+    });
+
+    it("should interpret today as local midnight", () => {
+      const result = parserWithOffset(480).parse("today");
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-06-14T16:00:00.000Z");
+      }
+    });
+
+    it("should interpret ISO dates as local midnight", () => {
+      const result = parserWithOffset(480).parse("2024-12-25");
+      expect(result.kind).toBe("absolute");
+      if (result.kind === "absolute") {
+        expect(result.date.toISOString()).toBe("2024-12-24T16:00:00.000Z");
       }
     });
   });
