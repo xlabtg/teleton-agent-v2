@@ -25,6 +25,26 @@ function createMockEmbeddingProvider(): EmbeddingProvider {
   };
 }
 
+function createExactEmbeddingProvider(): EmbeddingProvider {
+  const embedText = async (text: string) => {
+    const index = Number(text.replace(/\D/g, ""));
+    const embeddings: Record<number, number[]> = {
+      1: [1, 0, 0],
+      2: [0, 1, 0],
+      3: [0, 0, 1],
+    };
+    return embeddings[index] ?? [1, 1, 1];
+  };
+
+  return {
+    embed: vi.fn().mockImplementation(embedText),
+    embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
+      return Promise.all(texts.map(embedText));
+    }),
+    dimensions: vi.fn().mockReturnValue(3),
+  };
+}
+
 describe("CacheKeyGenerator", () => {
   let provider: EmbeddingProvider;
   let generator: CacheKeyGenerator;
@@ -61,6 +81,23 @@ describe("CacheKeyGenerator", () => {
     await generator.getKey("hello world");
     generator.clear();
     expect(generator.getRegisteredKeys()).toHaveLength(0);
+  });
+
+  it("should evict the least recently used key when capacity is exceeded", async () => {
+    const exactProvider = createExactEmbeddingProvider();
+    const bounded = new CacheKeyGenerator(exactProvider, {
+      similarityThreshold: 1,
+      maxEntries: 2,
+    });
+
+    const q1Key = await bounded.getKey("q1");
+    const q2Key = await bounded.getKey("q2");
+    await bounded.getKey("q1");
+    const q3Key = await bounded.getKey("q3");
+
+    expect(bounded.getRegisteredKeys().map((entry) => entry.key)).toEqual([q1Key, q3Key]);
+    expect(bounded.getRegisteredKeys()).toHaveLength(2);
+    expect(bounded.getEvictedKeys()).toEqual([q2Key]);
   });
 });
 
@@ -148,5 +185,25 @@ describe("PredictiveCache", () => {
     await cache.set("hello world", "response text");
     cache.clear();
     expect(cache.size()).toBe(0);
+  });
+
+  it("should drop cached responses when semantic keys are evicted", async () => {
+    provider = createExactEmbeddingProvider();
+    keyGen = new CacheKeyGenerator(provider, {
+      similarityThreshold: 1,
+      maxEntries: 2,
+    });
+    cache = new PredictiveCache(keyGen, metrics, { defaultTtlMs: 60_000 });
+
+    await cache.set("q1", "r1");
+    await cache.set("q2", "r2");
+    expect(cache.size()).toBe(2);
+
+    await cache.set("q3", "r3");
+
+    expect(cache.size()).toBe(2);
+    expect(await cache.get("q2")).toBe("r2");
+    expect(await cache.get("q3")).toBe("r3");
+    expect(keyGen.getRegisteredKeys().map((entry) => entry.query)).toEqual(["q2", "q3"]);
   });
 });

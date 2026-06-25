@@ -13,12 +13,19 @@ export interface CacheKeyGeneratorConfig {
    * semantically equivalent and share the same cache key. Range: 0–1.
    */
   similarityThreshold?: number;
+  /**
+   * Maximum number of semantic keys retained for similarity scans.
+   * The default bounds memory and scan cost while keeping a practical
+   * working set for in-memory caching.
+   */
+  maxEntries?: number;
 }
 
 export interface CacheKeyEntry {
   key: string;
   embedding: number[];
   query: string;
+  lastUsedAt: Date;
 }
 
 /**
@@ -32,13 +39,20 @@ export interface CacheKeyEntry {
  */
 export class CacheKeyGenerator {
   private readonly keys: CacheKeyEntry[] = [];
+  private readonly evictedKeys: string[] = [];
   private readonly similarityThreshold: number;
+  private readonly maxEntries: number;
 
   constructor(
     private readonly embeddingProvider: EmbeddingProvider,
     config: CacheKeyGeneratorConfig = {}
   ) {
     this.similarityThreshold = config.similarityThreshold ?? 0.92;
+    this.maxEntries = config.maxEntries ?? 1_000;
+
+    if (!Number.isInteger(this.maxEntries) || this.maxEntries < 1) {
+      throw new Error("CacheKeyGenerator maxEntries must be a positive integer");
+    }
   }
 
   /**
@@ -48,10 +62,14 @@ export class CacheKeyGenerator {
     const embedding = await this.embeddingProvider.embed(query);
     const match = this.findSimilar(embedding);
 
-    if (match) return match.key;
+    if (match) {
+      this.markRecentlyUsed(match);
+      return match.key;
+    }
 
     const key = `cache-${crypto.randomUUID()}`;
-    this.keys.push({ key, embedding, query });
+    this.keys.push({ key, embedding, query, lastUsedAt: new Date() });
+    this.evictLeastRecentlyUsed();
     return key;
   }
 
@@ -63,10 +81,25 @@ export class CacheKeyGenerator {
   }
 
   /**
+   * Return and clear keys evicted since the previous drain.
+   */
+  drainEvictedKeys(): string[] {
+    return this.evictedKeys.splice(0);
+  }
+
+  /**
+   * Return keys evicted since the previous drain without clearing them.
+   */
+  getEvictedKeys(): readonly string[] {
+    return this.evictedKeys;
+  }
+
+  /**
    * Clear all registered keys.
    */
   clear(): void {
     this.keys.length = 0;
+    this.evictedKeys.length = 0;
   }
 
   private findSimilar(embedding: number[]): CacheKeyEntry | undefined {
@@ -85,6 +118,24 @@ export class CacheKeyGenerator {
       return bestEntry;
     }
     return undefined;
+  }
+
+  private markRecentlyUsed(entry: CacheKeyEntry): void {
+    entry.lastUsedAt = new Date();
+    const index = this.keys.indexOf(entry);
+    if (index >= 0) {
+      this.keys.splice(index, 1);
+      this.keys.push(entry);
+    }
+  }
+
+  private evictLeastRecentlyUsed(): void {
+    while (this.keys.length > this.maxEntries) {
+      const [evicted] = this.keys.splice(0, 1);
+      if (evicted) {
+        this.evictedKeys.push(evicted.key);
+      }
+    }
   }
 }
 
