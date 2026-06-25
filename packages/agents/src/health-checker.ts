@@ -57,7 +57,8 @@ export class HealthChecker {
   private readonly autoDeregister: boolean;
   private readonly probe: HealthProbe;
   private readonly state = new Map<string, AgentHealthState>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
 
   constructor(registry: AgentRegistry, config: HealthCheckerConfig = {}) {
     this.registry = registry;
@@ -70,20 +71,23 @@ export class HealthChecker {
 
   /** Start the polling loop. Idempotent — calling twice is safe. */
   start(): void {
-    if (this.timer !== null) return;
-    this.timer = setInterval(() => void this.runChecks(), this.intervalMs);
+    if (this.running) return;
+    this.running = true;
+    this.scheduleNextCheck();
   }
 
   /** Stop the polling loop. */
   stop(): void {
-    if (this.timer === null) return;
-    clearInterval(this.timer);
-    this.timer = null;
+    this.running = false;
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
   /** True if the polling loop is currently running. */
   get isRunning(): boolean {
-    return this.timer !== null;
+    return this.running;
   }
 
   /**
@@ -111,6 +115,19 @@ export class HealthChecker {
   /** Return the current health state tracked for an agent. */
   getState(agentId: string): AgentHealthState | undefined {
     return this.state.get(agentId);
+  }
+
+  private scheduleNextCheck(): void {
+    if (!this.running) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+
+      void this.runChecks().finally(() => {
+        if (this.running) {
+          this.scheduleNextCheck();
+        }
+      });
+    }, this.intervalMs);
   }
 
   private applyResult(agentId: string, isHealthy: boolean): AgentStatus {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AgentRegistry } from "../../packages/agents/src/agent-registry.js";
 import { HealthChecker, type HealthProbe } from "../../packages/agents/src/health-checker.js";
 
@@ -23,6 +23,10 @@ describe("HealthChecker", () => {
 
   beforeEach(() => {
     registry = makeRegistry();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should mark agents healthy when probe succeeds", async () => {
@@ -97,6 +101,31 @@ describe("HealthChecker", () => {
     checker.start();
     checker.start(); // should not throw or create a second timer
     expect(checker.isRunning).toBe(true);
+    checker.stop();
+  });
+
+  it("does not start a second scheduled round while the previous round is still running", async () => {
+    vi.useFakeTimers();
+    const resolveProbes: Array<() => void> = [];
+    const probe = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveProbes.push(() => resolve(true));
+        })
+    );
+    const checker = new HealthChecker(registry, { intervalMs: 100, probe });
+
+    checker.start();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(probe).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(probe).toHaveBeenCalledTimes(2);
+
+    resolveProbes.splice(0).forEach((resolve) => resolve());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(probe).toHaveBeenCalledTimes(4);
+
     checker.stop();
   });
 });
