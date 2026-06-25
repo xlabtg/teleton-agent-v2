@@ -238,6 +238,19 @@ export class DeadLetterQueue {
     return before - this.entries.length;
   }
 
+  /**
+   * Discard entries that exhausted retries and were never replayed.
+   * Returns the number discarded.
+   */
+  purgePermanentFailures(): number {
+    const before = this.entries.length;
+    const keep = this.entries.filter(
+      (e) => e.replayedAt !== null || e.retryCount < this.maxRetries
+    );
+    this.entries.splice(0, this.entries.length, ...keep);
+    return before - this.entries.length;
+  }
+
   /** Export all entries (copy). */
   export(): DeadLetterEntry[] {
     return this.entries.slice();
