@@ -255,6 +255,47 @@ describe("AnomalyDetector", () => {
     expect(["medium", "high", "critical"]).toContain(alert.severity);
   });
 
+  it("should report the lower z-score threshold for low-side anomalies", async () => {
+    const handler = vi.fn();
+    router.register(handler);
+
+    for (let i = 0; i < 50; i++) {
+      profiler.record("latency", 100 + (i % 3) * 0.1);
+    }
+
+    const result = await detector.observe("latency", 0);
+    const baseline = profiler.getBaseline("latency");
+    expect(baseline).not.toBeNull();
+
+    expect(result.isAnomaly).toBe(true);
+    expect(result.method).toBe("zscore");
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0][0].threshold).toBeCloseTo(baseline!.mean - 3 * baseline!.stdDev);
+  });
+
+  it("should report the crossed IQR fence for IQR-only low-side anomalies", async () => {
+    const handler = vi.fn();
+    router.register(handler);
+    detector = new AnomalyDetector(profiler, router, contextBuilder, {
+      zScoreThreshold: 10,
+      iqrMultiplier: 1.5,
+      method: "iqr",
+    });
+
+    for (let i = 0; i < 50; i++) {
+      profiler.record("latency", 100 + (i % 3) * 0.1);
+    }
+
+    const result = await detector.observe("latency", 99.6);
+    const baseline = profiler.getBaseline("latency");
+    expect(baseline).not.toBeNull();
+
+    expect(result.isAnomaly).toBe(true);
+    expect(result.method).toBe("iqr");
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0][0].threshold).toBeCloseTo(baseline!.q1 - 1.5 * baseline!.iqr);
+  });
+
   it("should assemble investigation context on anomaly", async () => {
     for (let i = 0; i < 50; i++) {
       await detector.observe("latency", 100 + (i % 3) * 0.1);
