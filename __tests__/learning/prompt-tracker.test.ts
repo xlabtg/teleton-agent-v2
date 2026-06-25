@@ -86,4 +86,25 @@ describe("PromptTracker", () => {
     }
     expect(small.getUsageRecords("k")).toHaveLength(3);
   });
+
+  it("should evict oldest outcomes when maxOutcomeRecords is exceeded", () => {
+    const small = new PromptTracker({ maxOutcomeRecords: 3 });
+
+    for (let i = 0; i < 5; i++) {
+      const usage = small.recordUsage({
+        templateKey: "k",
+        templateVersion: 1,
+        interactionId: `i${i}`,
+      });
+      small.recordOutcome(usage.id, i / 10);
+    }
+
+    const outcomes = small.getOutcomeRecords("k");
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes.map((r) => r.score)).toEqual([0.2, 0.3, 0.4]);
+
+    const [stats] = small.getVersionStats("k");
+    expect(stats.scoredCount).toBe(3);
+    expect(stats.meanScore).toBeCloseTo(0.3);
+  });
 });
