@@ -1,8 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { CredentialManager } from "../../packages/integrations/src/credential-manager.js";
 import { NotFoundError, ConfigurationError } from "../../packages/core/src/errors/domain-errors.js";
 
 describe("CredentialManager", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
   describe("set / get", () => {
     it("should store and retrieve a credential", () => {
       const mgr = new CredentialManager();
@@ -108,6 +114,29 @@ describe("CredentialManager", () => {
       credential.nested.scope = "admin";
 
       expect(mgr.get("telegram")).toEqual({ token: "bot-token", nested: { scope: "send" } });
+    });
+  });
+
+  describe("environment config", () => {
+    it("should seed non-empty credentials from environment variables", () => {
+      process.env.TELETON_CRED_OPENAI = "sk-test";
+
+      const mgr = new CredentialManager();
+
+      expect(mgr.has("openai")).toBe(true);
+      expect(mgr.get("openai")).toBe("sk-test");
+    });
+
+    it("should skip empty and whitespace-only environment credentials", () => {
+      process.env.TELETON_CRED_OPENAI = "";
+      process.env.TELETON_CRED_ANTHROPIC = "   ";
+
+      const mgr = new CredentialManager();
+
+      expect(mgr.has("openai")).toBe(false);
+      expect(mgr.has("anthropic")).toBe(false);
+      expect(() => mgr.get("openai")).toThrow(NotFoundError);
+      expect(() => mgr.get("anthropic")).toThrow(NotFoundError);
     });
   });
 
