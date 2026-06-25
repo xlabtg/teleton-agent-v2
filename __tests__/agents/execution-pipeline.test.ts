@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { ExecutionPipeline } from "../../packages/agents/src/execution-pipeline.js";
-import { InMemoryCheckpointStore } from "../../packages/agents/src/checkpoint-store.js";
+import {
+  InMemoryCheckpointStore,
+  type CheckpointEntry,
+  type CheckpointStore,
+} from "../../packages/agents/src/checkpoint-store.js";
 import { RollbackHandler } from "../../packages/agents/src/rollback-handler.js";
 
 // ── ExecutionPipeline ────────────────────────────────────────────────────────
@@ -63,6 +67,49 @@ describe("ExecutionPipeline", () => {
 
     // Two steps = two checkpoints
     expect(store.listCheckpoints(state.id).length).toBe(2);
+  });
+
+  it("should not retry or fail a completed step when checkpoint save throws", async () => {
+    class ThrowingCheckpointStore implements CheckpointStore {
+      save(): void {
+        throw new Error("checkpoint unavailable");
+      }
+
+      load(): CheckpointEntry | undefined {
+        return undefined;
+      }
+
+      listCheckpoints(): CheckpointEntry[] {
+        return [];
+      }
+
+      remove(): void {}
+    }
+
+    const progressEvents: Array<{ name: string; status: string; output?: unknown }> = [];
+    const pipeline = new ExecutionPipeline({
+      checkpointStore: new ThrowingCheckpointStore(),
+      onProgress: (_id, name, status, output) => progressEvents.push({ name, status, output }),
+    });
+    const state = pipeline.create({
+      name: "checkpoint-failure-pipe",
+      steps: [{ name: "side-effect", retry: { maxAttempts: 3, backoffMs: 0 } }],
+    });
+    const executor = vi.fn().mockResolvedValue("done");
+
+    await pipeline.run(state, executor);
+
+    const stepState = state.steps.get("side-effect");
+    expect(state.status).toBe("completed");
+    expect(stepState?.status).toBe("completed");
+    expect(stepState?.attempt).toBe(1);
+    expect(stepState?.error).toBeUndefined();
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(progressEvents).toContainEqual({
+      name: "side-effect",
+      status: "checkpoint_failed",
+      output: expect.any(Error),
+    });
   });
 
   it("should invoke rollback handler on failure", async () => {
