@@ -174,6 +174,15 @@ describe("DelegationRouter", () => {
 // ── ResultAggregator ─────────────────────────────────────────────────────────
 
 describe("ResultAggregator", () => {
+  const result = (subtaskId: string, status: "success" | "failed" | "pending" | "skipped") => ({
+    subtaskId,
+    agentId: "a1",
+    status,
+    output: status === "success" ? { subtaskId } : null,
+    durationMs: 10,
+    completedAt: new Date(),
+  });
+
   it("should produce successful aggregation when all subtasks succeed", () => {
     const agg = new ResultAggregator();
     agg.record({
@@ -241,8 +250,64 @@ describe("ResultAggregator", () => {
       durationMs: 50,
       completedAt: new Date(),
     });
+    agg.record({
+      subtaskId: "s3",
+      agentId: "a1",
+      status: "success",
+      output: {},
+      durationMs: 50,
+      completedAt: new Date(),
+    });
     const result = agg.aggregate("task-1");
     expect(result.success).toBe(true); // majority succeeded
+  });
+
+  it("should fail with failFast=false when only one of many subtasks succeeds", () => {
+    const agg = new ResultAggregator({ failFast: false });
+    agg.record(result("s1", "success"));
+    agg.record(result("s2", "failed"));
+    agg.record(result("s3", "failed"));
+    agg.record(result("s4", "failed"));
+
+    expect(agg.aggregate("task-1").success).toBe(false);
+  });
+
+  it("should fail with failFast=false when exactly half of subtasks succeed", () => {
+    const agg = new ResultAggregator({ failFast: false });
+    agg.record(result("s1", "success"));
+    agg.record(result("s2", "success"));
+    agg.record(result("s3", "failed"));
+    agg.record(result("s4", "failed"));
+
+    expect(agg.aggregate("task-1").success).toBe(false);
+  });
+
+  it("should succeed with failFast=false when a majority of subtasks succeed", () => {
+    const agg = new ResultAggregator({ failFast: false });
+    agg.record(result("s1", "success"));
+    agg.record(result("s2", "success"));
+    agg.record(result("s3", "success"));
+    agg.record(result("s4", "failed"));
+
+    expect(agg.aggregate("task-1").success).toBe(true);
+  });
+
+  it("should not count pending or skipped subtasks as successes for majority", () => {
+    const agg = new ResultAggregator({ failFast: false });
+    agg.record(result("s1", "success"));
+    agg.record(result("s2", "pending"));
+    agg.record(result("s3", "skipped"));
+
+    expect(agg.aggregate("task-1").success).toBe(false);
+  });
+
+  it("should still require all subtasks to avoid failure when failFast=true", () => {
+    const agg = new ResultAggregator({ failFast: true });
+    agg.record(result("s1", "success"));
+    agg.record(result("s2", "success"));
+    agg.record(result("s3", "failed"));
+
+    expect(agg.aggregate("task-1").success).toBe(false);
   });
 
   it("reset clears all records", () => {
