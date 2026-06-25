@@ -163,18 +163,22 @@ export class ContextSerializer {
   /**
    * Merge a received snapshot into an existing local context.
    * Remote messages and memory entries are prepended so local history is preserved.
-   * Duplicate memory entries (same id) are skipped.
+   * Duplicate messages (same role, timestamp, and content) and duplicate memory
+   * entries (same id) are skipped, making repeated merges idempotent.
    */
   static merge(local: AgentContext, remote: SerializedAgentContext): AgentContext {
     const remoteMessages = remote.conversationHistory.map(deserializeMessage);
     const remoteMemory = remote.memory.map(deserializeMemoryEntry);
+
+    const localMessageKeys = new Set(local.conversationHistory.map(messageDedupKey));
+    const newMessages = remoteMessages.filter((m) => !localMessageKeys.has(messageDedupKey(m)));
 
     const localMemoryIds = new Set(local.memory.map((m) => m.id));
     const newMemory = remoteMemory.filter((m) => !localMemoryIds.has(m.id));
 
     return {
       ...local,
-      conversationHistory: [...remoteMessages, ...local.conversationHistory],
+      conversationHistory: [...newMessages, ...local.conversationHistory],
       memory: [...newMemory, ...local.memory],
     };
   }
@@ -198,6 +202,10 @@ function deserializeMessage(m: SerializedMessage): Message {
     timestamp: new Date(m.timestamp),
     metadata: m.metadata,
   };
+}
+
+function messageDedupKey(m: Message): string {
+  return JSON.stringify([m.role, m.timestamp.toISOString(), m.content]);
 }
 
 function serializeMemoryEntry(e: MemoryEntry, includeEmbeddings: boolean): SerializedMemoryEntry {

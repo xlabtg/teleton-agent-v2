@@ -174,5 +174,41 @@ describe("ContextSerializer", () => {
       const uniqueIds = new Set(ids);
       expect(ids.length).toBe(uniqueIds.size);
     });
+
+    it("should not duplicate conversation messages when merging the same snapshot twice", () => {
+      const local = makeContext();
+      const remoteSerializer = new ContextSerializer("agent-b");
+      const remoteSnapshot = remoteSerializer.serialize(makeContext());
+
+      const mergedOnce = ContextSerializer.merge(local, remoteSnapshot);
+      const mergedTwice = ContextSerializer.merge(mergedOnce, remoteSnapshot);
+
+      expect(mergedTwice.conversationHistory).toEqual(mergedOnce.conversationHistory);
+    });
+
+    it("should skip remote messages already present in local history", () => {
+      const timestamp = new Date("2024-01-01T00:00:00Z");
+      const local = makeContext({
+        conversationHistory: [
+          { role: "user", content: "Shared message", timestamp },
+          { role: "assistant", content: "Local reply", timestamp },
+        ],
+      });
+      const remoteCtx = makeContext({
+        conversationHistory: [
+          { role: "user", content: "Remote-only message", timestamp },
+          { role: "user", content: "Shared message", timestamp },
+        ],
+      });
+      const remoteSnapshot = new ContextSerializer("agent-b").serialize(remoteCtx);
+
+      const merged = ContextSerializer.merge(local, remoteSnapshot);
+
+      expect(merged.conversationHistory.map((m) => m.content)).toEqual([
+        "Remote-only message",
+        "Shared message",
+        "Local reply",
+      ]);
+    });
   });
 });
