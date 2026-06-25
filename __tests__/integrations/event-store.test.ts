@@ -86,6 +86,22 @@ describe("EventStore", () => {
       expect(pruned).toBe(1);
       expect(store.size).toBe(1);
     });
+
+    it("should remove old events even when events are not sorted by occurredAt", () => {
+      const store = new EventStore({ retentionMs: 1_000 });
+      const oldDate = new Date(Date.now() - 5_000).toISOString();
+      const newDate = new Date().toISOString();
+
+      store.append(makeEvent("new-first", "t", newDate));
+      store.append(makeEvent("old-middle", "t", oldDate));
+      store.append(makeEvent("new-last", "t", newDate));
+      store.append(makeEvent("old-last", "t", oldDate));
+
+      const pruned = store.compact();
+
+      expect(pruned).toBe(2);
+      expect(store.query().map((event) => event.id)).toEqual(["new-first", "new-last"]);
+    });
   });
 
   describe("export / import", () => {
