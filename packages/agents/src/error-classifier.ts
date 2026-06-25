@@ -31,15 +31,15 @@ export interface ClassificationResult {
 const CATEGORY_PATTERNS: Array<{ pattern: RegExp; category: ErrorCategory; maxRetries: number }> = [
   { pattern: /timeout|timed?\s*out/i, category: "timeout", maxRetries: 3 },
   { pattern: /rate.?limit|too\s+many\s+requests|429/i, category: "rate_limit", maxRetries: 5 },
-  { pattern: /valid|schema|format|parse/i, category: "validation", maxRetries: 2 },
   { pattern: /auth|unauthorized|forbidden|401|403/i, category: "auth", maxRetries: 0 },
+  { pattern: /corrupt|checksum|integrity/i, category: "data_corruption", maxRetries: 0 },
+  { pattern: /validation|schema|format|parse/i, category: "validation", maxRetries: 2 },
   { pattern: /not\s+found|404|missing/i, category: "not_found", maxRetries: 1 },
   {
     pattern: /network|connect|ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i,
     category: "network",
     maxRetries: 3,
   },
-  { pattern: /corrupt|checksum|integrity/i, category: "data_corruption", maxRetries: 0 },
 ];
 
 export class ErrorClassifier {
