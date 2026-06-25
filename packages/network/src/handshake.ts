@@ -15,6 +15,7 @@
  * If any step fails the responder sends REJECT and the session is aborted.
  */
 
+import { randomUUID } from "node:crypto";
 import {
   SUPPORTED_VERSIONS,
   negotiateVersion,
@@ -44,6 +45,8 @@ export interface HandshakePayload {
   errorCode?: string;
   /** Opaque nonce for replay-protection. */
   nonce?: string;
+  /** Echo of the peer nonce from the previous step. */
+  echoNonce?: string;
   /** Sender public key or token for mutual authentication (base64). */
   senderPublicKey?: string;
   /** Trusted anchor proof (e.g. signed nonce), base64. */
@@ -82,6 +85,10 @@ export interface AgentSession {
   updatedAt: Date;
   /** Namespace this session belongs to. */
   namespace: string;
+  /** Nonce issued by this agent and expected to be echoed by the peer. */
+  issuedNonce?: string;
+  /** Peer nonce this agent must echo in the next handshake step. */
+  expectedPeerNonce?: string;
 }
 
 // ─── Handshake errors ─────────────────────────────────────────────────────────
@@ -146,6 +153,7 @@ export interface HandshakeManagerConfig {
  */
 export class HandshakeManager {
   private readonly sessions = new Map<string, AgentSession>();
+  private readonly consumedInboundNonces = new Map<string, number>();
   private readonly agentId: string;
   private readonly capabilities: Record<string, string>;
   private readonly supportedVersions: string[];
@@ -170,6 +178,7 @@ export class HandshakeManager {
   initiateHandshake(remoteAgentId: string): { sessionId: string; payload: HandshakePayload } {
     const sessionId = `${this.agentId}:${remoteAgentId}:${Date.now()}`;
     const now = new Date();
+    const nonce = this.generateNonce();
 
     const session: AgentSession = {
       sessionId,
@@ -181,6 +190,7 @@ export class HandshakeManager {
       createdAt: now,
       updatedAt: now,
       namespace: this.namespace,
+      issuedNonce: nonce,
     };
 
     this.sessions.set(sessionId, session);
@@ -191,7 +201,7 @@ export class HandshakeManager {
         step: "HELLO",
         supportedVersions: [...this.supportedVersions],
         capabilities: { ...this.capabilities },
-        nonce: `${Date.now()}:${Math.random().toString(36).slice(2)}`,
+        nonce,
       },
     };
   }
@@ -218,6 +228,7 @@ export class HandshakeManager {
         ProtocolErrorCode.MALFORMED_MESSAGE
       );
     }
+    this.consumeExpectedNonce(ack.echoNonce, session.issuedNonce, "HELLO_ACK");
 
     const remoteVersions = ack.supportedVersions ?? [];
     const agreed = negotiateVersion(this.supportedVersions, remoteVersions);
@@ -231,6 +242,7 @@ export class HandshakeManager {
 
     session.protocolVersion = agreed;
     session.responderCapabilities = ack.capabilities ?? {};
+    session.expectedPeerNonce = ack.nonce;
     session.status = "hello_acked";
     session.updatedAt = new Date();
 
@@ -238,6 +250,8 @@ export class HandshakeManager {
       step: "CONFIRM",
       negotiatedVersion: agreed,
       capabilities: { ...this.capabilities },
+      nonce: session.expectedPeerNonce,
+      echoNonce: session.expectedPeerNonce,
     };
   }
 
@@ -263,6 +277,9 @@ export class HandshakeManager {
         ProtocolErrorCode.MALFORMED_MESSAGE
       );
     }
+    if (confirmAck.nonce) {
+      this.markInboundNonceConsumed(confirmAck.nonce);
+    }
 
     session.status = "confirmed";
     session.updatedAt = new Date();
@@ -278,6 +295,8 @@ export class HandshakeManager {
     hello: HandshakePayload,
     initiatorId: string
   ): { sessionId: string; payload: HandshakePayload } {
+    this.consumeRequiredInboundNonce(hello.nonce, "HELLO");
+
     const remoteVersions = hello.supportedVersions ?? [];
     const agreed = negotiateVersion(this.supportedVersions, remoteVersions);
 
@@ -308,6 +327,7 @@ export class HandshakeManager {
       };
     }
 
+    const nonce = this.generateNonce();
     const session: AgentSession = {
       sessionId,
       initiatorId,
@@ -318,6 +338,8 @@ export class HandshakeManager {
       createdAt: now,
       updatedAt: now,
       namespace: this.namespace,
+      issuedNonce: nonce,
+      expectedPeerNonce: hello.nonce,
     };
     this.sessions.set(sessionId, session);
 
@@ -327,7 +349,8 @@ export class HandshakeManager {
         step: "HELLO_ACK",
         supportedVersions: [...this.supportedVersions],
         capabilities: { ...this.capabilities },
-        nonce: `${Date.now()}:${Math.random().toString(36).slice(2)}`,
+        nonce,
+        echoNonce: hello.nonce,
       },
     };
   }
@@ -345,6 +368,7 @@ export class HandshakeManager {
         ProtocolErrorCode.MALFORMED_MESSAGE
       );
     }
+    this.consumeExpectedNonce(confirm.echoNonce ?? confirm.nonce, session.issuedNonce, "CONFIRM");
 
     // Verify the negotiated version matches what we agreed on
     if (confirm.negotiatedVersion && confirm.negotiatedVersion !== session.protocolVersion) {
@@ -389,10 +413,58 @@ export class HandshakeManager {
         removed++;
       }
     }
+    this.purgeConsumedNonces(cutoff);
     return removed;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
+
+  private generateNonce(): string {
+    return randomUUID();
+  }
+
+  private consumeRequiredInboundNonce(nonce: string | undefined, step: HandshakeStep): void {
+    if (!nonce) {
+      throw new HandshakeError(
+        `${step} is missing required nonce`,
+        ProtocolErrorCode.MALFORMED_MESSAGE
+      );
+    }
+    this.markInboundNonceConsumed(nonce);
+  }
+
+  private consumeExpectedNonce(
+    received: string | undefined,
+    expected: string | undefined,
+    step: HandshakeStep
+  ): void {
+    if (!expected || !received || received !== expected) {
+      throw new HandshakeError(`${step} nonce mismatch`, ProtocolErrorCode.MALFORMED_MESSAGE);
+    }
+    this.markInboundNonceConsumed(received);
+  }
+
+  private markInboundNonceConsumed(nonce: string): void {
+    const cutoff = Date.now() - this.sessionTimeoutMs;
+    this.purgeConsumedNonces(cutoff);
+
+    const consumedAt = this.consumedInboundNonces.get(nonce);
+    if (consumedAt !== undefined && consumedAt >= cutoff) {
+      throw new HandshakeError(
+        "Handshake nonce replay detected",
+        ProtocolErrorCode.MALFORMED_MESSAGE
+      );
+    }
+    this.consumedInboundNonces.set(nonce, Date.now());
+  }
+
+  private purgeConsumedNonces(cutoff: number): void {
+    for (const [nonce, consumedAt] of this.consumedInboundNonces) {
+      if (consumedAt < cutoff) {
+        this.consumedInboundNonces.delete(nonce);
+      }
+    }
+  }
 
   private requireSession(sessionId: string, expectedStatus: SessionStatus): AgentSession {
     const session = this.sessions.get(sessionId);

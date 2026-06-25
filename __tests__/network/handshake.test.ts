@@ -21,6 +21,7 @@ describe("HandshakeManager", () => {
       // Step 1: Initiator sends HELLO
       const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
       expect(hello.step).toBe("HELLO");
+      expect(hello.nonce).toBeDefined();
       expect(hello.supportedVersions).toBeDefined();
       expect(hello.capabilities).toEqual({ "code-review": "Reviews code" });
 
@@ -28,11 +29,14 @@ describe("HandshakeManager", () => {
       const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
       expect(ack.step).toBe("HELLO_ACK");
       expect(ack.supportedVersions).toBeDefined();
+      expect(ack.echoNonce).toBe(hello.nonce);
+      expect(ack.nonce).toBeDefined();
 
       // Step 3: Initiator handles HELLO_ACK → CONFIRM
       const confirm = initiator.handleHelloAck(initSessionId, ack);
       expect(confirm.step).toBe("CONFIRM");
       expect(confirm.negotiatedVersion).toBeDefined();
+      expect(confirm.echoNonce).toBe(ack.nonce);
 
       // Step 4: Responder handles CONFIRM → CONFIRM_ACK
       const confirmAck = responder.handleConfirm(respSessionId, confirm);
@@ -107,13 +111,84 @@ describe("HandshakeManager", () => {
     });
   });
 
+  describe("nonce replay protection", () => {
+    it("should require HELLO_ACK to echo the initiator HELLO nonce", () => {
+      const { initiator, responder } = makeManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { payload: ack } = responder.handleHello(hello, "agent-a");
+
+      expect(() =>
+        initiator.handleHelloAck(initSessionId, { ...ack, echoNonce: "wrong-nonce" })
+      ).toThrow(HandshakeError);
+    });
+
+    it("should require HELLO to include a nonce", () => {
+      const { responder } = makeManagers();
+
+      expect(() =>
+        responder.handleHello(
+          { step: "HELLO", supportedVersions: ["1.0.0"], capabilities: {} },
+          "agent-a"
+        )
+      ).toThrow(HandshakeError);
+    });
+
+    it("should require CONFIRM to echo the responder HELLO_ACK nonce", () => {
+      const { initiator, responder } = makeManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const confirm = initiator.handleHelloAck(initSessionId, ack);
+
+      expect(() =>
+        responder.handleConfirm(respSessionId, { ...confirm, echoNonce: "wrong-nonce" })
+      ).toThrow(HandshakeError);
+    });
+
+    it("should reject replayed HELLO_ACK echo nonces", () => {
+      const { initiator, responder } = makeManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { payload: ack } = responder.handleHello(hello, "agent-a");
+
+      initiator.handleHelloAck(initSessionId, ack);
+
+      expect(() => initiator.handleHelloAck(initSessionId, ack)).toThrow(HandshakeError);
+    });
+
+    it("should reject replayed HELLO nonces", () => {
+      const { initiator, responder } = makeManagers();
+      const { payload: hello } = initiator.initiateHandshake("agent-b");
+
+      const first = responder.handleHello(hello, "agent-a");
+      expect(first.payload.step).toBe("HELLO_ACK");
+
+      expect(() => responder.handleHello(hello, "agent-a")).toThrow(HandshakeError);
+    });
+
+    it("should reject replayed CONFIRM nonces", () => {
+      const { initiator, responder } = makeManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const confirm = initiator.handleHelloAck(initSessionId, ack);
+      const replayedConfirm = { ...confirm };
+
+      const first = responder.handleConfirm(respSessionId, confirm);
+      expect(first.step).toBe("CONFIRM_ACK");
+
+      expect(() => responder.handleConfirm(respSessionId, replayedConfirm)).toThrow(HandshakeError);
+    });
+  });
+
   describe("handleConfirm — version disagreement", () => {
     it("should return REJECT when confirmed version differs from agreed", () => {
       const { initiator, responder } = makeManagers();
-      const { payload: hello } = initiator.initiateHandshake("agent-b");
-      const { sessionId: respSessionId } = responder.handleHello(hello, "agent-a");
       // Simulate a tampered CONFIRM with wrong version
-      const tamperedConfirm = { step: "CONFIRM" as const, negotiatedVersion: "9.9.9" };
+      const { payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const tamperedConfirm = {
+        step: "CONFIRM" as const,
+        negotiatedVersion: "9.9.9",
+        echoNonce: ack.nonce,
+      };
       const rejectAck = responder.handleConfirm(respSessionId, tamperedConfirm);
       expect(rejectAck.step).toBe("REJECT");
     });
