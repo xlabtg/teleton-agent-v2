@@ -22,6 +22,8 @@ describe("AgentRegistry", () => {
     expect(descriptor.id).toBe("agent-1");
     expect(descriptor.status).toBe("unknown");
     expect(descriptor.namespace).toBe("default");
+    expect(descriptor.registeredAt).toBeInstanceOf(Date);
+    expect(descriptor.updatedAt).toBeInstanceOf(Date);
   });
 
   it("should update an existing agent on re-registration", () => {

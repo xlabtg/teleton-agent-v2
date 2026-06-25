@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AgentRegistry } from "../../packages/agents/src/agent-registry.js";
 import { HealthChecker, type HealthProbe } from "../../packages/agents/src/health-checker.js";
+import { NotFoundError } from "../../packages/core/src/errors/domain-errors.js";
 
 function makeRegistry() {
   const registry = new AgentRegistry();
@@ -85,6 +86,51 @@ describe("HealthChecker", () => {
     });
     await checker.checkAgent("a1");
     expect(registry.size).toBe(1); // a1 was deregistered
+  });
+
+  it("does not write stale health results after an agent is deregistered mid-round", async () => {
+    const updateStatus = vi.spyOn(registry, "updateStatus");
+    const checker = new HealthChecker(registry, {
+      probe: async (agentId) => {
+        if (agentId === "a1") {
+          registry.deregister("a1");
+        }
+        return true;
+      },
+    });
+
+    await checker.runChecks();
+
+    expect(updateStatus).not.toHaveBeenCalledWith("a1", expect.any(String));
+    expect(() => registry.get("a1")).toThrow(NotFoundError);
+  });
+
+  it("does not write stale health results to a re-registered agent with the same id", async () => {
+    const checker = new HealthChecker(registry, {
+      probe: async (agentId) => {
+        if (agentId === "a1") {
+          registry.deregister("a1");
+          registry.register({ id: "a1", name: "A1 fresh", version: "2.0.0", capabilities: [] });
+        }
+        return true;
+      },
+    });
+
+    await checker.runChecks();
+
+    const liveAgent = registry.get("a1");
+    expect(liveAgent.name).toBe("A1 fresh");
+    expect(liveAgent.status).toBe("unknown");
+    expect(checker.getState("a1")).toBeUndefined();
+  });
+
+  it("propagates unexpected registry errors while applying a health result", async () => {
+    vi.spyOn(registry, "updateStatus").mockImplementation(() => {
+      throw new Error("storage write failed");
+    });
+    const checker = new HealthChecker(registry, { probe: async () => true });
+
+    await expect(checker.checkAgent("a1")).rejects.toThrow("storage write failed");
   });
 
   it("start and stop control the polling loop", () => {

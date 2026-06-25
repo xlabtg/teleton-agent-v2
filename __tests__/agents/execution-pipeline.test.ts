@@ -252,6 +252,8 @@ describe("InMemoryCheckpointStore", () => {
     const entry = store.load("p1");
     expect(entry).toBeDefined();
     expect(entry!.pipelineId).toBe("p1");
+    expect(entry!.checkpointAt).toBeInstanceOf(Date);
+    expect(entry!.snapshot.updatedAt).toBeInstanceOf(Date);
   });
 
   it("should evict old checkpoints when max is reached", () => {
