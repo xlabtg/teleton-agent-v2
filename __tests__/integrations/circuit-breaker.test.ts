@@ -145,6 +145,64 @@ describe("CircuitBreaker", () => {
       expect(probe).toHaveBeenCalledTimes(1);
       expect(internals.state).toBe("OPEN");
     });
+
+    it("should allow only one in-flight probe in HALF_OPEN", async () => {
+      const now = Date.now();
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const cb = new CircuitBreaker({
+        failureThreshold: 1,
+        maxRetries: 0,
+        recoveryTimeoutMs: 1_000,
+        retryBaseDelayMs: 0,
+      });
+
+      try {
+        await expect(
+          cb.call(async () => {
+            throw new Error("initial failure");
+          })
+        ).rejects.toThrow("initial failure");
+
+        vi.setSystemTime(now + 1_001);
+
+        let resolveProbe!: (value: string) => void;
+        let resolveProbeStarted!: () => void;
+        const probeStarted = new Promise<void>((resolve) => {
+          resolveProbeStarted = resolve;
+        });
+        const probe = vi.fn(async () => {
+          resolveProbeStarted();
+          return new Promise<string>((resolve) => {
+            resolveProbe = resolve;
+          });
+        });
+
+        const firstProbe = cb.call(probe);
+        await probeStarted;
+
+        const blockedCalls = await Promise.allSettled([
+          cb.call(probe),
+          cb.call(probe),
+          cb.call(probe),
+        ]);
+
+        expect(blockedCalls).toHaveLength(3);
+        expect(blockedCalls.every((result) => result.status === "rejected")).toBe(true);
+        for (const result of blockedCalls) {
+          expect(result).toMatchObject({
+            status: "rejected",
+            reason: expect.any(InfrastructureError),
+          });
+        }
+        expect(probe).toHaveBeenCalledTimes(1);
+
+        resolveProbe("recovered");
+        await expect(firstProbe).resolves.toBe("recovered");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("reset()", () => {

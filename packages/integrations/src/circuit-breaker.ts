@@ -75,6 +75,7 @@ export class CircuitBreaker {
   private openedAt: Date | null = null;
   private totalCalls = 0;
   private totalFailures = 0;
+  private halfOpenProbeInFlight = false;
 
   private readonly failureThreshold: number;
   private readonly recoveryTimeoutMs: number;
@@ -127,6 +128,14 @@ export class CircuitBreaker {
     }
 
     if (this.state === "HALF_OPEN") {
+      if (this.halfOpenProbeInFlight) {
+        throw new InfrastructureError(
+          "Circuit breaker is HALF_OPEN. A recovery probe is already in progress.",
+          new Error("Circuit half-open probe in progress")
+        );
+      }
+
+      this.halfOpenProbeInFlight = true;
       try {
         const result = await fn();
         this._onSuccess();
@@ -134,6 +143,8 @@ export class CircuitBreaker {
       } catch (err) {
         this._onFailure();
         throw err;
+      } finally {
+        this.halfOpenProbeInFlight = false;
       }
     }
 
@@ -160,6 +171,7 @@ export class CircuitBreaker {
     this.state = "CLOSED";
     this.failureCount = 0;
     this.halfOpenSuccessCount = 0;
+    this.halfOpenProbeInFlight = false;
     this.openedAt = null;
   }
 
@@ -203,6 +215,7 @@ export class CircuitBreaker {
     if (this.state === "OPEN" && this._effectiveState() === "HALF_OPEN") {
       this.state = "HALF_OPEN";
       this.halfOpenSuccessCount = 0;
+      this.halfOpenProbeInFlight = false;
     }
   }
 
