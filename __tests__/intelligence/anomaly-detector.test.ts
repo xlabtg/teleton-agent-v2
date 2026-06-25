@@ -144,6 +144,62 @@ describe("AlertRouter", () => {
     expect(latencyHistory).toHaveLength(1);
     expect(latencyHistory[0].metric).toBe("latency");
   });
+
+  it("should cap retained alert history", async () => {
+    const router = new AlertRouter({ deduplicationWindowMs: 0, maxHistorySize: 2 });
+
+    for (const metric of ["first", "second", "third"]) {
+      await router.emit({
+        metric,
+        severity: "low",
+        message: `${metric} alert`,
+        value: 1,
+        threshold: 0,
+      });
+    }
+
+    expect(router.getHistory().map((alert) => alert.metric)).toEqual(["third", "second"]);
+  });
+
+  it("should apply history cap to suppressed alerts", async () => {
+    const router = new AlertRouter({ deduplicationWindowMs: 60_000, maxHistorySize: 2 });
+
+    for (const value of [1, 2, 3]) {
+      await router.emit({
+        metric: "cpu",
+        severity: "medium",
+        message: "High CPU",
+        value,
+        threshold: 0,
+      });
+    }
+
+    const history = router.getHistory();
+    expect(history).toHaveLength(2);
+    expect(history.every((alert) => alert.metric === "cpu")).toBe(true);
+    expect(history[0].suppressedUntil).toBeDefined();
+    expect(history[1].suppressedUntil).toBeDefined();
+  });
+
+  it("should limit history reads without scanning older results into the response", async () => {
+    const router = new AlertRouter({ deduplicationWindowMs: 0, maxHistorySize: 10 });
+
+    for (const metric of ["errors", "latency", "errors", "latency"]) {
+      await router.emit({
+        metric,
+        severity: "low",
+        message: `${metric} alert`,
+        value: 1,
+        threshold: 0,
+      });
+    }
+
+    expect(router.getHistory(undefined, 2).map((alert) => alert.metric)).toEqual([
+      "latency",
+      "errors",
+    ]);
+    expect(router.getHistory("latency", 1)).toHaveLength(1);
+  });
 });
 
 describe("AnomalyDetector", () => {
