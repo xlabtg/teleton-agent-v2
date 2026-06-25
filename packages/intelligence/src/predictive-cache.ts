@@ -45,6 +45,7 @@ export class PredictiveCache {
    */
   async get(query: string): Promise<string | null> {
     const key = await this.keyGenerator.getKey(query);
+    this.dropEvictedKeyEntries();
     const entry = this.store.get(key);
 
     if (!entry) {
@@ -71,6 +72,7 @@ export class PredictiveCache {
    */
   async set(query: string, response: string, ttlMs?: number, fromWarming = false): Promise<void> {
     const key = await this.keyGenerator.getKey(query);
+    this.dropEvictedKeyEntries();
     const now = new Date();
     const ttl = ttlMs ?? this.defaultTtlMs;
 
@@ -88,6 +90,7 @@ export class PredictiveCache {
    */
   async invalidate(query: string): Promise<void> {
     const key = await this.keyGenerator.getKey(query);
+    this.dropEvictedKeyEntries();
     this.store.delete(key);
   }
 
@@ -115,5 +118,11 @@ export class PredictiveCache {
   clear(): void {
     this.store.clear();
     this.keyGenerator.clear();
+  }
+
+  private dropEvictedKeyEntries(): void {
+    for (const key of this.keyGenerator.drainEvictedKeys()) {
+      this.store.delete(key);
+    }
   }
 }
