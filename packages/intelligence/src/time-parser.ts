@@ -138,20 +138,6 @@ function applyTimeOfDay(base: Date, expr: string, userUtcOffsetMinutes: number):
   );
 }
 
-function nextWeekday(from: Date, targetDay: number, userUtcOffsetMinutes: number): Date {
-  const d = toUserWallClock(from, userUtcOffsetMinutes);
-  const diff = (targetDay - d.getUTCDay() + 7) % 7 || 7;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return fromUserWallClock(
-    d.getUTCFullYear(),
-    d.getUTCMonth(),
-    d.getUTCDate(),
-    0,
-    0,
-    userUtcOffsetMinutes
-  );
-}
-
 function prevWeekday(from: Date, targetDay: number, userUtcOffsetMinutes: number): Date {
   const d = toUserWallClock(from, userUtcOffsetMinutes);
   const diff = (d.getUTCDay() - targetDay + 7) % 7 || 7;
@@ -164,6 +150,38 @@ function prevWeekday(from: Date, targetDay: number, userUtcOffsetMinutes: number
     0,
     userUtcOffsetMinutes
   );
+}
+
+function resolveUpcomingWeekday(
+  from: Date,
+  targetDay: number,
+  expr: string,
+  userUtcOffsetMinutes: number
+): Date {
+  const wallClock = toUserWallClock(from, userUtcOffsetMinutes);
+  const diff = (targetDay - wallClock.getUTCDay() + 7) % 7;
+  wallClock.setUTCDate(wallClock.getUTCDate() + diff);
+
+  const candidate = applyTimeOfDay(
+    fromUserWallClock(
+      wallClock.getUTCFullYear(),
+      wallClock.getUTCMonth(),
+      wallClock.getUTCDate(),
+      0,
+      0,
+      userUtcOffsetMinutes
+    ),
+    expr,
+    userUtcOffsetMinutes
+  );
+
+  if (candidate.getTime() <= from.getTime()) {
+    const next = new Date(candidate);
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next;
+  }
+
+  return candidate;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,11 +264,11 @@ export class TimeParser {
       let date: Date;
       if (modifier === "last") {
         date = prevWeekday(this.ref, day, this.userUtcOffsetMinutes);
+        date = applyTimeOfDay(date, normalised, this.userUtcOffsetMinutes);
       } else {
         // "next" or bare weekday → upcoming occurrence
-        date = nextWeekday(this.ref, day, this.userUtcOffsetMinutes);
+        date = resolveUpcomingWeekday(this.ref, day, normalised, this.userUtcOffsetMinutes);
       }
-      date = applyTimeOfDay(date, normalised, this.userUtcOffsetMinutes);
       return {
         kind: "relative",
         date,
