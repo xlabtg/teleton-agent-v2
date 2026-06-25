@@ -29,6 +29,89 @@ export interface EntityExtractor {
   extract(text: string): Promise<ExtractionResult>;
 }
 
+const ENTITY_RELATION_LIMIT = 50;
+
+const STOPWORDS = new Set([
+  "and",
+  "but",
+  "or",
+  "the",
+  "a",
+  "an",
+  "at",
+  "by",
+  "for",
+  "from",
+  "in",
+  "of",
+  "on",
+  "to",
+  "with",
+  "и",
+  "а",
+  "но",
+  "или",
+  "в",
+  "во",
+  "на",
+  "по",
+  "с",
+  "со",
+  "у",
+  "о",
+  "об",
+]);
+
+const SENTENCE_PATTERN = /[^.!?\n]+/gu;
+const ENTITY_TOKEN_PATTERN = /(?:\p{Lu}[\p{L}\p{M}\p{N}_-]*|\p{L}[\p{Lu}\p{M}\p{N}_-]+)/gu;
+
+function normalizeLabel(label: string): string {
+  return label.toLocaleLowerCase();
+}
+
+function isStopword(label: string): boolean {
+  return STOPWORDS.has(normalizeLabel(label));
+}
+
+function addEntity(
+  entities: ExtractedEntity[],
+  seen: Set<string>,
+  label: string,
+  type: NodeType
+): void {
+  const trimmed = label.trim();
+  const normalized = normalizeLabel(trimmed);
+  if (trimmed.length <= 1 || seen.has(normalized) || isStopword(trimmed)) {
+    return;
+  }
+
+  seen.add(normalized);
+  entities.push({
+    label: trimmed,
+    type,
+    properties: { source: "pattern" },
+  });
+}
+
+function extractEntityLabels(text: string): string[] {
+  return Array.from(text.matchAll(ENTITY_TOKEN_PATTERN), (match) => match[0]);
+}
+
+function extractSentenceEntities(sentence: string, knownLabels: Set<string>): string[] {
+  const labels: string[] = [];
+  const seenInSentence = new Set<string>();
+
+  for (const label of extractEntityLabels(sentence)) {
+    const normalized = normalizeLabel(label);
+    if (knownLabels.has(normalized) && !seenInSentence.has(normalized)) {
+      seenInSentence.add(normalized);
+      labels.push(label);
+    }
+  }
+
+  return labels;
+}
+
 /**
  * Pattern-based entity extractor.
  * Uses simple heuristics to identify entities and relationships.
@@ -40,45 +123,40 @@ export class PatternEntityExtractor implements EntityExtractor {
     const relations: ExtractedRelation[] = [];
     const seen = new Set<string>();
 
-    // Extract capitalized phrases as entities (simple NER heuristic)
-    const capitalizedPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    // Extract capitalized/acronym/Unicode phrases as entities (simple NER heuristic)
     let match;
-
-    while ((match = capitalizedPattern.exec(text)) !== null) {
-      const label = match[1];
-      if (!seen.has(label.toLowerCase()) && label.length > 1) {
-        seen.add(label.toLowerCase());
-        entities.push({
-          label,
-          type: "entity",
-          properties: { source: "pattern" },
-        });
-      }
+    for (const label of extractEntityLabels(text)) {
+      addEntity(entities, seen, label, "entity");
     }
 
     // Extract quoted terms as concepts
     const quotedPattern = /"([^"]+)"|'([^']+)'/g;
     while ((match = quotedPattern.exec(text)) !== null) {
       const label = match[1] ?? match[2];
-      if (!seen.has(label.toLowerCase())) {
-        seen.add(label.toLowerCase());
-        entities.push({
-          label,
-          type: "concept",
-          properties: { source: "pattern" },
-        });
-      }
+      addEntity(entities, seen, label, "concept");
     }
 
-    // Create "related_to" relations between co-occurring entities
-    for (let i = 0; i < entities.length; i++) {
-      for (let j = i + 1; j < entities.length; j++) {
-        relations.push({
-          sourceLabel: entities[i].label,
-          targetLabel: entities[j].label,
-          type: "related_to",
-          weight: 0.5,
-        });
+    // Create bounded "related_to" relations for entities sharing a sentence.
+    const knownLabels = new Set(entities.map((entity) => normalizeLabel(entity.label)));
+    SENTENCE_PATTERN.lastIndex = 0;
+    while (
+      relations.length < ENTITY_RELATION_LIMIT &&
+      (match = SENTENCE_PATTERN.exec(text)) !== null
+    ) {
+      const sentenceEntities = extractSentenceEntities(match[0], knownLabels);
+      for (let i = 0; i < sentenceEntities.length; i++) {
+        for (let j = i + 1; j < sentenceEntities.length; j++) {
+          if (relations.length >= ENTITY_RELATION_LIMIT) {
+            break;
+          }
+
+          relations.push({
+            sourceLabel: sentenceEntities[i],
+            targetLabel: sentenceEntities[j],
+            type: "related_to",
+            weight: 0.5,
+          });
+        }
       }
     }
 
