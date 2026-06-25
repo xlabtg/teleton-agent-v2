@@ -7,6 +7,11 @@
 
 import type { AgentRegistry } from "./agent-registry.js";
 import type { AgentDescriptor, AgentCapabilityDescriptor } from "./agent-descriptor.js";
+import {
+  compareAgentCapabilityScores,
+  createAgentMatchScore,
+  scoreAgentCapability,
+} from "./agent-match-scoring.js";
 
 export interface CapabilityQuery {
   /** Required capability names. All must be present on the agent. */
@@ -36,6 +41,10 @@ export interface DiscoveryResult {
   descriptor: AgentDescriptor;
   /** Normalised match score in [0, 1]. Higher is better. */
   score: number;
+  /** Health rank used before score so healthy agents outrank degraded agents. */
+  healthTier: number;
+  /** Normalised health score used by shared ranking. */
+  healthScore: number;
   /** Names of matched required capabilities. */
   matchedRequired: string[];
   /** Names of matched preferred capabilities. */
@@ -89,30 +98,34 @@ export class DiscoveryService {
           ? matchedCaps.reduce((sum, c) => sum + (c.confidence ?? 0.5), 0) / matchedCaps.length
           : 0.5;
 
-      // Health bonus
-      const healthBonus =
-        descriptor.status === "healthy" ? 0.2 : descriptor.status === "degraded" ? 0.05 : 0;
+      const capabilityScore = scoreAgentCapability(descriptor, avgConfidence);
 
       const maxScore =
         1 /* required */ +
         (preferred.length > 0 ? 0.3 : 0) +
         (tags.length > 0 ? 0.2 : 0) +
-        0.2 /* confidence */ +
-        0.2; /* health */
+        1; /* shared capability/health score */
 
       const raw =
         (required.length > 0 ? 1 : 0) +
         (preferred.length > 0 ? (matchedPreferred.length / preferred.length) * 0.3 : 0) +
         (tags.length > 0 ? (tagHits / tags.length) * 0.2 : 0) +
-        avgConfidence * 0.2 +
-        healthBonus;
+        capabilityScore.score;
 
       const score = maxScore > 0 ? Math.min(raw / maxScore, 1) : 0;
+      const discoveryScore = createAgentMatchScore(descriptor, score);
 
-      results.push({ descriptor, score, matchedRequired, matchedPreferred });
+      results.push({
+        descriptor,
+        score,
+        healthTier: discoveryScore.healthTier,
+        healthScore: discoveryScore.healthScore,
+        matchedRequired,
+        matchedPreferred,
+      });
     }
 
-    results.sort((a, b) => b.score - a.score);
+    results.sort((a, b) => compareAgentCapabilityScores(a, b));
     return results.slice(0, limit);
   }
 
