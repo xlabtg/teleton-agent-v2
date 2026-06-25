@@ -218,7 +218,7 @@ export class CredentialManager {
     if (typeof process === "undefined") return;
     const prefix = `${this.envPrefix}_`;
     for (const [key, value] of Object.entries(process.env)) {
-      if (!key.startsWith(prefix) || value === undefined) continue;
+      if (!key.startsWith(prefix) || value === undefined || value.trim().length === 0) continue;
       const serviceId = key.slice(prefix.length).toLowerCase();
       if (serviceId.length === 0) continue;
       // Only seed from env if not already set programmatically.
