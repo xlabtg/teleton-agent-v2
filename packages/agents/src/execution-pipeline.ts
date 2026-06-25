@@ -50,6 +50,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function buildExecutionOrder(steps: StepDefinition[]): StepDefinition[][] {
   // Topological sort into waves of parallelisable steps.
   const nameSet = new Set(steps.map((s) => s.name));
@@ -174,14 +187,11 @@ export class ExecutionPipeline {
         let output: unknown;
 
         if (stepState.definition.timeoutMs) {
-          output = await Promise.race([
+          output = await withTimeout(
             executor(stepName, state.context),
-            sleep(stepState.definition.timeoutMs).then(() => {
-              throw new Error(
-                `Step "${stepName}" timed out after ${stepState.definition.timeoutMs}ms`
-              );
-            }),
-          ]);
+            stepState.definition.timeoutMs,
+            `Step "${stepName}" timed out after ${stepState.definition.timeoutMs}ms`
+          );
         } else {
           output = await executor(stepName, state.context);
         }

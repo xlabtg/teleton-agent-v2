@@ -128,6 +128,27 @@ describe("ExecutionPipeline", () => {
     const consumerCtx = contextCaptures[1];
     expect(consumerCtx["step.producer.output"]).toBe(42);
   });
+
+  it("should clear a step timeout timer when the step completes first", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const pipeline = new ExecutionPipeline();
+      const state = pipeline.create({
+        name: "timeout-cleanup-pipe",
+        steps: [{ name: "fast-step", timeoutMs: 60_000 }],
+      });
+      const executor = vi.fn().mockResolvedValue("ok");
+
+      await pipeline.run(state, executor);
+
+      expect(state.status).toBe("completed");
+      expect(state.steps.get("fast-step")?.status).toBe("completed");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ── CheckpointStore ──────────────────────────────────────────────────────────
