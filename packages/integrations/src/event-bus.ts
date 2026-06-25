@@ -173,7 +173,7 @@ export class EventBus {
     if (handlers.length === 0) return;
 
     const results = await Promise.allSettled(
-      handlers.map((h) => Promise.resolve(h.handler(normalized)))
+      handlers.map((h) => Promise.resolve().then(() => h.handler(normalized)))
     );
 
     for (let i = 0; i < results.length; i++) {
