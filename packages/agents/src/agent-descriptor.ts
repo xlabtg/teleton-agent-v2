@@ -41,9 +41,9 @@ export interface AgentDescriptor {
    * The health checker calls this to determine liveness.
    */
   healthEndpoint?: string;
-  /** ISO-8601 timestamp when the agent registered. */
+  /** Date when the agent registered. */
   registeredAt: Date;
-  /** ISO-8601 timestamp of the last status update. */
+  /** Date of the last status update. */
   updatedAt: Date;
   /** Current availability status. */
   status: AgentStatus;

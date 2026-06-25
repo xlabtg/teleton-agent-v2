@@ -24,7 +24,7 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
 export interface CheckpointEntry {
   pipelineId: string;
   checkpointAt: Date;
-  /** Deep-cloned snapshot of the pipeline state at checkpoint time. */
+  /** Deep-cloned snapshot of the pipeline state at checkpoint time. Dates remain Date instances. */
   snapshot: DeepReadonly<Omit<PipelineState, "steps"> & { steps: Record<string, unknown> }>;
 }
 

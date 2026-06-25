@@ -11,6 +11,7 @@
 
 import type { AgentRegistry } from "./agent-registry.js";
 import type { AgentStatus } from "./agent-descriptor.js";
+import { NotFoundError } from "../../core/src/errors/domain-errors.js";
 
 /** Function that probes a single agent and resolves to true if healthy. */
 export type HealthProbe = (agentId: string, endpoint?: string) => Promise<boolean>;
@@ -100,7 +101,7 @@ export class HealthChecker {
     await Promise.all(
       agents.map(async (agent) => {
         const isHealthy = await this.probe(agent.id, agent.healthEndpoint).catch(() => false);
-        this.applyResult(agent.id, isHealthy);
+        this.applyResult(agent.id, isHealthy, agent);
       })
     );
   }
@@ -130,7 +131,27 @@ export class HealthChecker {
     }, this.intervalMs);
   }
 
-  private applyResult(agentId: string, isHealthy: boolean): AgentStatus {
+  private applyResult(
+    agentId: string,
+    isHealthy: boolean,
+    expectedAgent?: ReturnType<AgentRegistry["get"]>
+  ): AgentStatus {
+    let liveAgent: ReturnType<AgentRegistry["get"]>;
+
+    try {
+      liveAgent = this.registry.get(agentId);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        this.state.delete(agentId);
+        return "unknown";
+      }
+      throw error;
+    }
+
+    if (expectedAgent && liveAgent !== expectedAgent) {
+      return liveAgent.status;
+    }
+
     const prev = this.state.get(agentId) ?? {
       consecutiveFailures: 0,
       consecutiveSuccesses: 0,
@@ -161,15 +182,17 @@ export class HealthChecker {
       });
     }
 
-    try {
-      this.registry.updateStatus(agentId, status);
+    this.registry.updateStatus(agentId, status);
 
-      if (status === "unhealthy" && this.autoDeregister) {
+    if (status === "unhealthy" && this.autoDeregister) {
+      try {
         this.registry.deregister(agentId);
         this.state.delete(agentId);
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) {
+          throw error;
+        }
       }
-    } catch {
-      // Agent may have been manually deregistered between the list() call and now.
     }
 
     return status;
