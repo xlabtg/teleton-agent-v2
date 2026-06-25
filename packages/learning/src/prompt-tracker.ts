@@ -40,6 +40,8 @@ export interface VersionStats {
 export interface PromptTrackerConfig {
   /** Maximum number of usage records to retain. Oldest are evicted (FIFO). */
   maxUsageRecords?: number;
+  /** Maximum number of outcome records to retain. Oldest are evicted (FIFO). */
+  maxOutcomeRecords?: number;
 }
 
 /**
@@ -49,9 +51,11 @@ export class PromptTracker {
   private readonly usageRecords: PromptUsageRecord[] = [];
   private readonly outcomeRecords: PromptOutcomeRecord[] = [];
   private readonly maxUsageRecords: number;
+  private readonly maxOutcomeRecords: number;
 
   constructor(config: PromptTrackerConfig = {}) {
     this.maxUsageRecords = config.maxUsageRecords ?? 50_000;
+    this.maxOutcomeRecords = config.maxOutcomeRecords ?? 50_000;
   }
 
   /** Record that a prompt template was used for an interaction. */
@@ -92,6 +96,11 @@ export class PromptTracker {
     };
 
     this.outcomeRecords.push(record);
+
+    if (this.outcomeRecords.length > this.maxOutcomeRecords) {
+      this.outcomeRecords.shift();
+    }
+
     return record;
   }
 
