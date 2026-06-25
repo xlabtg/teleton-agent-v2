@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { AgentRegistry } from "../../packages/agents/src/agent-registry.js";
-import { HealthChecker } from "../../packages/agents/src/health-checker.js";
+import { HealthChecker, type HealthProbe } from "../../packages/agents/src/health-checker.js";
 
 function makeRegistry() {
   const registry = new AgentRegistry();
   registry.register({ id: "a1", name: "A1", version: "1.0.0", capabilities: [] });
   registry.register({ id: "a2", name: "A2", version: "1.0.0", capabilities: [] });
   return registry;
+}
+
+function sequenceProbe(results: boolean[]): HealthProbe {
+  let index = 0;
+  return async () => {
+    const result = results[index];
+    index += 1;
+    return result ?? results[results.length - 1] ?? true;
+  };
 }
 
 describe("HealthChecker", () => {
@@ -37,15 +46,31 @@ describe("HealthChecker", () => {
     expect(registry.get("a1").status).toBe("unhealthy");
   });
 
-  it("should reset failure count after a successful check", async () => {
-    let callCount = 0;
-    const probe = async () => callCount++ >= 2; // fail first 2, then succeed
-    const checker = new HealthChecker(registry, { probe, failureThreshold: 5 });
+  it("should reset failure count after a successful recovery check", async () => {
+    const checker = new HealthChecker(registry, {
+      probe: sequenceProbe([false, false, true]),
+      failureThreshold: 5,
+      recoveryThreshold: 1,
+    });
     await checker.checkAgent("a1");
     await checker.checkAgent("a1");
     await checker.checkAgent("a1"); // success
     expect(checker.getState("a1")?.consecutiveFailures).toBe(0);
     expect(registry.get("a1").status).toBe("healthy");
+  });
+
+  it("should keep a flapping agent degraded until the recovery threshold is met", async () => {
+    const checker = new HealthChecker(registry, {
+      probe: sequenceProbe([false, true, false, true, true]),
+      failureThreshold: 2,
+      recoveryThreshold: 2,
+    });
+
+    await expect(checker.checkAgent("a1")).resolves.toBe("degraded");
+    await expect(checker.checkAgent("a1")).resolves.toBe("degraded");
+    await expect(checker.checkAgent("a1")).resolves.toBe("degraded");
+    await expect(checker.checkAgent("a1")).resolves.toBe("degraded");
+    await expect(checker.checkAgent("a1")).resolves.toBe("healthy");
   });
 
   it("should auto-deregister unhealthy agents when configured", async () => {
