@@ -26,6 +26,11 @@ export interface HealthCheckerConfig {
    */
   failureThreshold?: number;
   /**
+   * Number of consecutive successful probes required before recovering to
+   * "healthy" after a degraded or unhealthy status. Default: 2.
+   */
+  recoveryThreshold?: number;
+  /**
    * If true, automatically deregister agents once they become "unhealthy".
    * Default: false.
    */
@@ -39,6 +44,7 @@ export interface HealthCheckerConfig {
 
 interface AgentHealthState {
   consecutiveFailures: number;
+  consecutiveSuccesses: number;
   lastCheckedAt: Date;
   lastStatus: AgentStatus;
 }
@@ -47,6 +53,7 @@ export class HealthChecker {
   private readonly registry: AgentRegistry;
   private readonly intervalMs: number;
   private readonly failureThreshold: number;
+  private readonly recoveryThreshold: number;
   private readonly autoDeregister: boolean;
   private readonly probe: HealthProbe;
   private readonly state = new Map<string, AgentHealthState>();
@@ -56,6 +63,7 @@ export class HealthChecker {
     this.registry = registry;
     this.intervalMs = config.intervalMs ?? 30_000;
     this.failureThreshold = config.failureThreshold ?? 3;
+    this.recoveryThreshold = config.recoveryThreshold ?? 2;
     this.autoDeregister = config.autoDeregister ?? false;
     this.probe = config.probe ?? (() => Promise.resolve(true));
   }
@@ -108,6 +116,7 @@ export class HealthChecker {
   private applyResult(agentId: string, isHealthy: boolean): AgentStatus {
     const prev = this.state.get(agentId) ?? {
       consecutiveFailures: 0,
+      consecutiveSuccesses: 0,
       lastCheckedAt: new Date(),
       lastStatus: "unknown" as AgentStatus,
     };
@@ -115,9 +124,12 @@ export class HealthChecker {
     let status: AgentStatus;
 
     if (isHealthy) {
-      status = "healthy";
+      const successes = prev.consecutiveSuccesses + 1;
+      const isRecovering = prev.lastStatus === "degraded" || prev.lastStatus === "unhealthy";
+      status = !isRecovering || successes >= this.recoveryThreshold ? "healthy" : "degraded";
       this.state.set(agentId, {
         consecutiveFailures: 0,
+        consecutiveSuccesses: successes,
         lastCheckedAt: new Date(),
         lastStatus: status,
       });
@@ -126,6 +138,7 @@ export class HealthChecker {
       status = failures >= this.failureThreshold ? "unhealthy" : "degraded";
       this.state.set(agentId, {
         consecutiveFailures: failures,
+        consecutiveSuccesses: 0,
         lastCheckedAt: new Date(),
         lastStatus: status,
       });
