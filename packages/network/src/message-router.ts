@@ -9,7 +9,7 @@
  */
 
 import { type AgentMessage, type RouteHop, createProtocolErrorMessage } from "./message-schema.js";
-import { ProtocolErrorCode, DEFAULT_NAMESPACE, MAX_TTL } from "./protocol.js";
+import { ProtocolErrorCode, DEFAULT_NAMESPACE, MAX_TTL, validateHeaders } from "./protocol.js";
 
 // ─── Transport abstraction ────────────────────────────────────────────────────
 
@@ -114,6 +114,7 @@ export type RoutingOutcome =
   | "dropped_ttl"
   | "no_route"
   | "transport_error"
+  | "malformed_message"
   | "unauthenticated";
 
 export interface RoutingResult {
@@ -180,6 +181,26 @@ export class MessageRouter {
    * and outbound (locally generated) messages.
    */
   async route(message: AgentMessage): Promise<RoutingResult> {
+    const headerErrors = validateHeaders(message.headers as unknown as Record<string, unknown>);
+    if (headerErrors.length > 0) {
+      return this.fail(
+        message,
+        "malformed_message",
+        ProtocolErrorCode.INVALID_HEADER,
+        headerErrors.join("; ")
+      );
+    }
+
+    const routingErrors = this.validateRouting(message.routing as unknown);
+    if (routingErrors.length > 0) {
+      return this.fail(
+        message,
+        "malformed_message",
+        ProtocolErrorCode.MALFORMED_MESSAGE,
+        routingErrors.join("; ")
+      );
+    }
+
     const namespace = message.routing.namespace ?? this.namespace;
     if (
       this.isPeerAuthenticated &&
@@ -287,6 +308,46 @@ export class MessageRouter {
       return msg.routing.via.slice(1);
     }
     return msg.routing.via;
+  }
+
+  private validateRouting(routing: unknown): string[] {
+    const errors: string[] = [];
+
+    if (!routing || typeof routing !== "object") {
+      return ["routing must be an object"];
+    }
+
+    const data = routing as Record<string, unknown>;
+    if (!data.source || typeof data.source !== "string") {
+      errors.push("routing.source must be a non-empty string");
+    }
+    if (!data.destination || typeof data.destination !== "string") {
+      errors.push("routing.destination must be a non-empty string");
+    }
+    if (data.namespace !== undefined && typeof data.namespace !== "string") {
+      errors.push("routing.namespace must be a string when present");
+    }
+    if (!Array.isArray(data.via) || data.via.some((hop) => typeof hop !== "string")) {
+      errors.push("routing.via must be an array of strings");
+    }
+    if (!Array.isArray(data.path)) {
+      errors.push("routing.path must be an array");
+    } else if (
+      data.path.some(
+        (hop) =>
+          !hop ||
+          typeof hop !== "object" ||
+          typeof (hop as Record<string, unknown>).agentId !== "string" ||
+          typeof (hop as Record<string, unknown>).timestamp !== "string"
+      )
+    ) {
+      errors.push("routing.path must contain hops with string agentId and timestamp");
+    }
+    if (typeof data.ttl !== "number" || !Number.isFinite(data.ttl) || data.ttl < 0) {
+      errors.push("routing.ttl must be a finite non-negative number");
+    }
+
+    return errors;
   }
 
   private async fail(

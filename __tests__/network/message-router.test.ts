@@ -227,6 +227,52 @@ describe("MessageRouter", () => {
     });
   });
 
+  describe("message validation", () => {
+    it("should reject invalid headers before forwarding", async () => {
+      const { transport, calls } = makeTransport();
+      const router = makeRouter("agent-a", transport, routeTable);
+
+      const msg = createRequestMessage({ source: "agent-a", destination: "agent-b", action: "x" });
+      msg.headers.protocolVersion = "not-semver";
+
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("malformed_message");
+      expect(result.reason).toContain("headers.protocolVersion");
+      expect(result.errorMessage).toBeUndefined();
+      expect(calls.length).toBe(0);
+    });
+
+    it("should reject invalid routing before forwarding", async () => {
+      const { transport, calls } = makeTransport();
+      const router = makeRouter("agent-a", transport, routeTable);
+
+      const msg = createRequestMessage({ source: "agent-a", destination: "agent-b", action: "x" });
+      (msg.routing as unknown as Record<string, unknown>).via = "agent-b";
+
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("malformed_message");
+      expect(result.reason).toContain("routing.via");
+      expect(result.errorMessage).toBeUndefined();
+      expect(calls.length).toBe(0);
+    });
+
+    it("should reject non-finite routing ttl before forwarding", async () => {
+      const { transport, calls } = makeTransport();
+      const router = makeRouter("agent-a", transport, routeTable);
+
+      const msg = createRequestMessage({ source: "agent-a", destination: "agent-b", action: "x" });
+      msg.routing.ttl = Number.NaN;
+
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("malformed_message");
+      expect(result.reason).toContain("routing.ttl");
+      expect(calls.length).toBe(0);
+    });
+  });
+
   describe("no route", () => {
     it("should return no_route when destination is unknown", async () => {
       const { transport } = makeTransport();
