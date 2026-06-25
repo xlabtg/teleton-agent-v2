@@ -27,10 +27,28 @@ describe("ErrorClassifier", () => {
     expect(r.isRecoverable).toBe(false);
   });
 
+  it("should classify invalid auth messages as non-recoverable auth errors", () => {
+    for (const message of ["Invalid auth token", "Invalid session: unauthorized", "unauthorized"]) {
+      const r = classifier.classify(new Error(message));
+      expect(r.category).toBe("auth");
+      expect(r.isRecoverable).toBe(false);
+      expect(r.suggestedMaxRetries).toBe(0);
+    }
+  });
+
   it("should classify data corruption as non-recoverable", () => {
     const r = classifier.classify(new Error("Checksum integrity failure"));
     expect(r.category).toBe("data_corruption");
     expect(r.isRecoverable).toBe(false);
+  });
+
+  it("should classify invalid integrity messages as non-recoverable data corruption", () => {
+    for (const message of ["invalid checksum", "integrity violation"]) {
+      const r = classifier.classify(new Error(message));
+      expect(r.category).toBe("data_corruption");
+      expect(r.isRecoverable).toBe(false);
+      expect(r.suggestedMaxRetries).toBe(0);
+    }
   });
 
   it("should classify network errors", () => {
