@@ -109,7 +109,12 @@ function routeKey(destination: string, namespace: string): string {
 
 // ─── Routing result ───────────────────────────────────────────────────────────
 
-export type RoutingOutcome = "delivered" | "dropped_ttl" | "no_route" | "transport_error";
+export type RoutingOutcome =
+  | "delivered"
+  | "dropped_ttl"
+  | "no_route"
+  | "transport_error"
+  | "unauthenticated";
 
 export interface RoutingResult {
   outcome: RoutingOutcome;
@@ -137,6 +142,8 @@ export interface MessageRouterConfig {
    * fails. Default: true.
    */
   emitErrorOnFailure?: boolean;
+  /** Return true when the peer has a confirmed authenticated session. */
+  isPeerAuthenticated?: (agentId: string, namespace: string) => boolean;
 }
 
 /**
@@ -157,6 +164,7 @@ export class MessageRouter {
   private readonly routeTable: RouteTable;
   private readonly namespace: string;
   private readonly emitErrorOnFailure: boolean;
+  private readonly isPeerAuthenticated?: (agentId: string, namespace: string) => boolean;
 
   constructor(config: MessageRouterConfig) {
     this.agentId = config.agentId;
@@ -164,6 +172,7 @@ export class MessageRouter {
     this.routeTable = config.routeTable;
     this.namespace = config.namespace ?? DEFAULT_NAMESPACE;
     this.emitErrorOnFailure = config.emitErrorOnFailure ?? true;
+    this.isPeerAuthenticated = config.isPeerAuthenticated;
   }
 
   /**
@@ -171,6 +180,20 @@ export class MessageRouter {
    * and outbound (locally generated) messages.
    */
   async route(message: AgentMessage): Promise<RoutingResult> {
+    const namespace = message.routing.namespace ?? this.namespace;
+    if (
+      this.isPeerAuthenticated &&
+      message.routing.source !== this.agentId &&
+      !this.isPeerAuthenticated(message.routing.source, namespace)
+    ) {
+      return this.fail(
+        message,
+        "unauthenticated",
+        ProtocolErrorCode.SIGNATURE_INVALID,
+        `Unauthenticated peer "${message.routing.source}"`
+      );
+    }
+
     // ── 1. TTL check ──────────────────────────────────────────────────────────
     if (message.routing.ttl <= 0) {
       return this.fail(

@@ -5,7 +5,10 @@ import {
   TransportError,
 } from "../../packages/network/src/message-router.js";
 import type { AgentTransport, RouteEntry } from "../../packages/network/src/message-router.js";
-import { createRequestMessage } from "../../packages/network/src/message-schema.js";
+import {
+  createRequestMessage,
+  isProtocolErrorMessage,
+} from "../../packages/network/src/message-schema.js";
 import type { AgentMessage } from "../../packages/network/src/message-schema.js";
 import { MAX_TTL } from "../../packages/network/src/protocol.js";
 
@@ -249,6 +252,55 @@ describe("MessageRouter", () => {
       const result = await router.route(msg);
 
       expect(result.outcome).toBe("transport_error");
+    });
+  });
+
+  describe("authenticated peer enforcement", () => {
+    it("should reject inbound messages from unauthenticated peers", async () => {
+      const { transport, calls } = makeTransport();
+      const router = new MessageRouter({
+        agentId: "agent-b",
+        transport,
+        routeTable,
+        isPeerAuthenticated: () => false,
+      });
+
+      const msg = createRequestMessage({
+        source: "agent-a",
+        destination: "agent-b",
+        action: "x",
+      });
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("unauthenticated");
+      expect(result.errorMessage).toBeDefined();
+      expect(isProtocolErrorMessage(result.errorMessage!)).toBe(true);
+      if (!isProtocolErrorMessage(result.errorMessage!)) {
+        throw new Error("Expected protocol error message");
+      }
+      expect(result.errorMessage.payload.code).toBe("PROTOCOL_SIGNATURE_INVALID");
+      expect(calls.length).toBe(1);
+      expect(calls[0].agentId).toBe("agent-a");
+    });
+
+    it("should deliver inbound messages from authenticated peers", async () => {
+      const { transport } = makeTransport();
+      const router = new MessageRouter({
+        agentId: "agent-b",
+        transport,
+        routeTable,
+        isPeerAuthenticated: (agentId) => agentId === "agent-a",
+      });
+
+      const msg = createRequestMessage({
+        source: "agent-a",
+        destination: "agent-b",
+        action: "x",
+      });
+      const result = await router.route(msg);
+
+      expect(result.outcome).toBe("delivered");
+      expect(result.deliveredTo).toBe("agent-b");
     });
   });
 
