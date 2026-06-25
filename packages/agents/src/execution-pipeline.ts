@@ -22,10 +22,12 @@ import { ValidationError } from "../../core/src/errors/domain-errors.js";
 
 export type StepExecutor = (stepName: string, context: Record<string, unknown>) => Promise<unknown>;
 
+export type ProgressStatus = StepStatus | "checkpoint_failed";
+
 export type ProgressCallback = (
   pipelineId: string,
   stepName: string,
-  status: StepStatus,
+  status: ProgressStatus,
   output?: unknown
 ) => void;
 
@@ -183,9 +185,9 @@ export class ExecutionPipeline {
       stepState.attempt = attempt;
       stepState.startedAt = new Date();
 
-      try {
-        let output: unknown;
+      let output: unknown;
 
+      try {
         if (stepState.definition.timeoutMs) {
           output = await withTimeout(
             executor(stepName, state.context),
@@ -195,17 +197,6 @@ export class ExecutionPipeline {
         } else {
           output = await executor(stepName, state.context);
         }
-
-        stepState.output = output;
-        stepState.completedAt = new Date();
-        this.setStepStatus(state, stepName, "completed");
-        this.onProgress?.(state.id, stepName, "completed", output);
-
-        // Expose step output in the shared context for downstream steps.
-        state.context[`step.${stepName}.output`] = output;
-
-        this.checkpointStore?.save(state);
-        return;
       } catch (err) {
         lastError = err;
 
@@ -213,13 +204,35 @@ export class ExecutionPipeline {
           const delay = retry.backoffMs * Math.pow(2, attempt - 1);
           if (delay > 0) await sleep(delay);
         }
+        continue;
       }
+
+      stepState.output = output;
+      stepState.completedAt = new Date();
+      this.setStepStatus(state, stepName, "completed");
+      this.onProgress?.(state.id, stepName, "completed", output);
+
+      // Expose step output in the shared context for downstream steps.
+      state.context[`step.${stepName}.output`] = output;
+
+      this.saveCheckpoint(state, stepName);
+      return;
     }
 
     stepState.error = String(lastError);
     stepState.completedAt = new Date();
     this.setStepStatus(state, stepName, "failed");
     this.onProgress?.(state.id, stepName, "failed");
+  }
+
+  private saveCheckpoint(state: PipelineState, stepName: string): void {
+    if (!this.checkpointStore) return;
+
+    try {
+      this.checkpointStore.save(state);
+    } catch (err) {
+      this.onProgress?.(state.id, stepName, "checkpoint_failed", err);
+    }
   }
 
   private transition(state: PipelineState, to: PipelineStatus): void {
