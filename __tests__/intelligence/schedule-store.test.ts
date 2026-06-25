@@ -85,6 +85,21 @@ describe("ScheduleStore", () => {
     expect(updated.triggerAt.getUTCDate()).toBe(16); // next day
   });
 
+  it("advance() should skip missed daily intervals and land after the fire time", () => {
+    const e = store.create({
+      userId: "u1",
+      action: "daily",
+      triggerAt: T("2024-06-01T08:00:00Z"),
+      recurrence: { kind: "daily", intervalDays: 1 },
+    });
+
+    store.advance(e.id, T("2024-06-15T08:30:00Z"));
+
+    const updated = store.get(e.id)!;
+    expect(updated.status).toBe("pending");
+    expect(updated.triggerAt.toISOString()).toBe("2024-06-16T08:00:00.000Z");
+  });
+
   it("detectConflicts() should find overlapping entries within window", () => {
     store.create({
       userId: "u1",
