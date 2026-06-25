@@ -68,13 +68,9 @@ describe("ScheduleParser", () => {
     expect(result!.triggerAt.toISOString().startsWith("2024-06-16")).toBe(true);
   });
 
-  it("should have lower confidence when no intent keyword", () => {
+  it("should return null when no intent keyword is present", () => {
     // Has a time expression but no explicit intent keyword
-    const withIntent = parser().parse("remind me tomorrow");
-    const withoutIntent = parser().parse("tomorrow meeting");
-    if (withoutIntent) {
-      expect(withoutIntent.confidence).toBeLessThan(withIntent?.confidence ?? 1);
-    }
+    expect(parser().parse("tomorrow meeting")).toBeNull();
   });
 
   it("should expose raw text", () => {
