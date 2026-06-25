@@ -69,7 +69,7 @@ export class BaselineProfiler {
     const n = sorted.length;
 
     const mean = sorted.reduce((s, v) => s + v, 0) / n;
-    const variance = sorted.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+    const variance = sorted.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1);
     const stdDev = Math.sqrt(variance);
 
     const q1 = percentile(sorted, 25);
