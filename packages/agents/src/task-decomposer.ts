@@ -52,10 +52,57 @@ export interface TaskDecomposerConfig {
    * Custom decomposition strategy. Defaults to the built-in keyword heuristic.
    */
   strategy?: DecompositionStrategy;
+  /**
+   * Capability names that default decomposition is allowed to emit. When set,
+   * derived slugs are validated up front so invalid subtasks fail during
+   * decomposition instead of silently failing later in routing.
+   */
+  allowedCapabilities?: Iterable<string>;
 }
 
-/** Built-in heuristic: one subtask per top-level key in the payload. */
-function defaultStrategy(taskName: string, payload: Record<string, unknown>): SubTask[] {
+function capabilitySlug(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function buildCapabilityIndex(capabilities: Iterable<string> | undefined): Map<string, string> {
+  const index = new Map<string, string>();
+
+  for (const capability of capabilities ?? []) {
+    index.set(capability, capability);
+    index.set(capabilitySlug(capability), capability);
+  }
+
+  return index;
+}
+
+function resolveRequiredCapability(
+  candidate: string,
+  capabilityIndex: Map<string, string>
+): string {
+  const slug = capabilitySlug(candidate);
+
+  if (capabilityIndex.size === 0) {
+    return slug;
+  }
+
+  const match = capabilityIndex.get(candidate) ?? capabilityIndex.get(slug);
+  if (match) {
+    return match;
+  }
+
+  const allowed = Array.from(new Set(capabilityIndex.values())).sort();
+  throw new Error(
+    `Default decomposition derived requiredCapability "${slug}" from "${candidate}", ` +
+      `but it is not registered. Allowed capabilities: ${allowed.join(", ")}`
+  );
+}
+
+/** Built-in best-effort heuristic: one subtask per top-level key in the payload. */
+function defaultStrategy(
+  taskName: string,
+  payload: Record<string, unknown>,
+  capabilityIndex: Map<string, string>
+): SubTask[] {
   const keys = Object.keys(payload);
 
   if (keys.length <= 1) {
@@ -64,7 +111,7 @@ function defaultStrategy(taskName: string, payload: Record<string, unknown>): Su
         id: crypto.randomUUID(),
         name: taskName,
         description: taskName,
-        requiredCapability: taskName.toLowerCase().replace(/\s+/g, "-"),
+        requiredCapability: resolveRequiredCapability(taskName, capabilityIndex),
         dependsOn: [],
         payload,
         priorityWeight: 50,
@@ -76,7 +123,7 @@ function defaultStrategy(taskName: string, payload: Record<string, unknown>): Su
     id: crypto.randomUUID(),
     name: `${taskName}:${key}`,
     description: `Handle "${key}" portion of task "${taskName}"`,
-    requiredCapability: key.toLowerCase().replace(/\s+/g, "-"),
+    requiredCapability: resolveRequiredCapability(key, capabilityIndex),
     dependsOn: idx === 0 ? [] : [], // parallel by default
     payload: { [key]: payload[key] },
     priorityWeight: 50,
@@ -86,10 +133,14 @@ function defaultStrategy(taskName: string, payload: Record<string, unknown>): Su
 export class TaskDecomposer {
   private readonly maxDepth: number;
   private readonly strategy: DecompositionStrategy;
+  private readonly capabilityIndex: Map<string, string>;
 
   constructor(config: TaskDecomposerConfig = {}) {
     this.maxDepth = config.maxDepth ?? 3;
-    this.strategy = config.strategy ?? defaultStrategy;
+    this.capabilityIndex = buildCapabilityIndex(config.allowedCapabilities);
+    this.strategy =
+      config.strategy ??
+      ((taskName, payload) => defaultStrategy(taskName, payload, this.capabilityIndex));
   }
 
   /**

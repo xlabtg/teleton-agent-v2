@@ -288,6 +288,13 @@ When a complex task arrives, `TaskDecomposer` breaks it into self-contained subt
 | Rule-based | Pattern-match on task type, split by known rules |
 | LLM-based  | Ask the LLM to produce a structured subtask list |
 
+The built-in rule-based decomposer is a best-effort placeholder: by default it
+slugifies the task name or payload keys into `requiredCapability` values. For
+production routing, inject a domain-specific `DecompositionStrategy` or pass the
+registry's advertised capability names as `allowedCapabilities`; this validates
+derived capabilities during decomposition and fails fast when no registered
+capability matches.
+
 `CapabilityMatcher` scores each agent against each subtask. `DelegationRouter` picks the best agent using one of three routing modes:
 
 - **Best-fit** — highest capability score wins.

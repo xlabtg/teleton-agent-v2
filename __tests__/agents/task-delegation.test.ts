@@ -23,6 +23,32 @@ describe("TaskDecomposer", () => {
     expect(result.subtasks.length).toBe(2);
   });
 
+  it("should map default strategy slugs to allowed capability names", () => {
+    const validating = new TaskDecomposer({
+      allowedCapabilities: ["summarize-report", "user-prefs"],
+    });
+
+    const simple = validating.decompose("task-3", "Summarize report", { text: "..." });
+    expect(simple.subtasks[0].requiredCapability).toBe("summarize-report");
+
+    const complex = validating.decompose("task-4", "configure", {
+      "user prefs": {},
+      "summarize report": {},
+    });
+    expect(complex.subtasks.map((subtask) => subtask.requiredCapability)).toEqual([
+      "user-prefs",
+      "summarize-report",
+    ]);
+  });
+
+  it("should fail during decomposition when a derived capability is not allowed", () => {
+    const validating = new TaskDecomposer({ allowedCapabilities: ["code-review"] });
+
+    expect(() => validating.decompose("task-5", "Summarize report", { text: "..." })).toThrow(
+      'requiredCapability "summarize-report"'
+    );
+  });
+
   it("should use a custom strategy when provided", () => {
     const custom = new TaskDecomposer({
       strategy: (_name, _payload) => [
