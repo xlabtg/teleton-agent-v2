@@ -59,8 +59,9 @@ export class ResultAggregator {
   aggregate(taskId: string): AggregatedResult {
     const subtaskResults = Array.from(this.results.values());
     const failures = subtaskResults.filter((r) => r.status === "failed").map((r) => r.subtaskId);
+    const successes = subtaskResults.filter((r) => r.status === "success").length;
 
-    const success = this.failFast ? failures.length === 0 : failures.length < subtaskResults.length;
+    const success = this.failFast ? failures.length === 0 : successes > subtaskResults.length / 2;
 
     const outputs: Record<string, unknown> = {};
     for (const r of subtaskResults) {
