@@ -100,6 +100,37 @@ describe("ScheduleStore", () => {
     expect(updated.triggerAt.toISOString()).toBe("2024-06-16T08:00:00.000Z");
   });
 
+  it("advance() should honor weekly dayOfWeek when selecting the next occurrence", () => {
+    const e = store.create({
+      userId: "u1",
+      action: "weekly",
+      triggerAt: T("2024-06-12T09:00:00Z"), // Wednesday
+      recurrence: { kind: "weekly", intervalWeeks: 1, dayOfWeek: 1 }, // Monday
+    });
+
+    store.advance(e.id, T("2024-06-12T09:00:00Z"));
+
+    const updated = store.get(e.id)!;
+    expect(updated.status).toBe("pending");
+    expect(updated.triggerAt.toISOString()).toBe("2024-06-17T09:00:00.000Z");
+    expect(updated.triggerAt.getUTCDay()).toBe(1);
+  });
+
+  it("advance() should clamp monthly dayOfMonth to short months without rollover", () => {
+    const e = store.create({
+      userId: "u1",
+      action: "monthly",
+      triggerAt: T("2024-01-31T09:00:00Z"),
+      recurrence: { kind: "monthly", dayOfMonth: 31 },
+    });
+
+    store.advance(e.id, T("2024-01-31T09:00:00Z"));
+
+    const updated = store.get(e.id)!;
+    expect(updated.status).toBe("pending");
+    expect(updated.triggerAt.toISOString()).toBe("2024-02-29T09:00:00.000Z");
+  });
+
   it("detectConflicts() should find overlapping entries within window", () => {
     store.create({
       userId: "u1",

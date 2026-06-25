@@ -307,10 +307,13 @@ export class ScheduleStore {
         break;
       case "weekly":
         d.setUTCDate(d.getUTCDate() + rule.intervalWeeks * 7);
+        if (rule.dayOfWeek !== undefined) {
+          const dayDelta = rule.dayOfWeek - d.getUTCDay();
+          d.setUTCDate(d.getUTCDate() + dayDelta);
+        }
         break;
       case "monthly":
-        d.setUTCMonth(d.getUTCMonth() + 1);
-        break;
+        return this._nextMonthlyOccurrence(d, rule.dayOfMonth);
       case "cron":
         // Cron advancement is intentionally left to the caller / a cron library.
         // We add one day as a safe fallback so the entry doesn't get stuck.
@@ -321,5 +324,28 @@ export class ScheduleStore {
         break;
     }
     return d;
+  }
+
+  private _nextMonthlyOccurrence(current: Date, dayOfMonth: number): Date {
+    const targetMonth = current.getUTCMonth() + 1;
+    const targetYear = current.getUTCFullYear() + Math.floor(targetMonth / 12);
+    const normalizedMonth = targetMonth % 12;
+    const clampedDay = Math.min(dayOfMonth, this._daysInUtcMonth(targetYear, normalizedMonth));
+
+    return new Date(
+      Date.UTC(
+        targetYear,
+        normalizedMonth,
+        clampedDay,
+        current.getUTCHours(),
+        current.getUTCMinutes(),
+        current.getUTCSeconds(),
+        current.getUTCMilliseconds()
+      )
+    );
+  }
+
+  private _daysInUtcMonth(year: number, month: number): number {
+    return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   }
 }
