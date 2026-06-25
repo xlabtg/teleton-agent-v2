@@ -66,6 +66,7 @@ export interface HttpAdapterConfig {
   baseUrl: string;
   defaultHeaders?: Record<string, string>;
   defaultTimeoutMs?: number;
+  maxRedirects?: number;
 }
 
 /**
@@ -84,10 +85,12 @@ export abstract class HttpBaseAdapter<TCredential = unknown> implements ApiAdapt
 
   protected readonly defaultHeaders: Record<string, string>;
   protected readonly defaultTimeoutMs: number;
+  protected readonly maxRedirects: number;
 
   constructor(config: HttpAdapterConfig) {
     this.defaultHeaders = config.defaultHeaders ?? {};
     this.defaultTimeoutMs = config.defaultTimeoutMs ?? 30_000;
+    this.maxRedirects = config.maxRedirects ?? 5;
   }
 
   /** Return authentication headers derived from the credential. */
@@ -114,12 +117,17 @@ export abstract class HttpBaseAdapter<TCredential = unknown> implements ApiAdapt
 
     const start = Date.now();
     try {
-      const response = await fetch(url, {
-        method: request.method,
-        headers,
-        body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
-        signal: controller.signal,
-      });
+      const response = await this.fetchWithRedirects(
+        url,
+        {
+          method: request.method,
+          headers,
+          body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
+          signal: controller.signal,
+          redirect: "manual",
+        },
+        new URL(this.meta.baseUrl).origin
+      );
 
       const durationMs = Date.now() - start;
       const responseHeaders = headersToRecord(response.headers);
@@ -129,6 +137,38 @@ export abstract class HttpBaseAdapter<TCredential = unknown> implements ApiAdapt
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private async fetchWithRedirects(
+    url: string,
+    init: RequestInit,
+    trustedOrigin: string
+  ): Promise<Response> {
+    let currentUrl = url;
+    let currentInit = init;
+
+    for (let redirectCount = 0; redirectCount <= this.maxRedirects; redirectCount += 1) {
+      const response = await fetch(currentUrl, currentInit);
+      if (!isRedirect(response.status)) return response;
+
+      const location = response.headers.get("location");
+      if (!location) return response;
+      if (redirectCount === this.maxRedirects) {
+        throw new Error(`Too many redirects for ${this.meta.serviceId}`);
+      }
+
+      const redirectUrl = new URL(location, currentUrl);
+      currentInit = {
+        ...currentInit,
+        headers:
+          redirectUrl.origin === trustedOrigin
+            ? currentInit.headers
+            : stripSensitiveHeaders(currentInit.headers),
+      };
+      currentUrl = redirectUrl.toString();
+    }
+
+    throw new Error(`Too many redirects for ${this.meta.serviceId}`);
   }
 }
 
@@ -151,6 +191,35 @@ function headersToRecord(headers: Headers): Record<string, string> {
     out[key] = value;
   });
   return out;
+}
+
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+function stripSensitiveHeaders(headers: RequestInit["headers"]): Headers {
+  const safeHeaders = new Headers(headers);
+  for (const key of safeHeaders.keys()) {
+    if (isSensitiveHeader(key)) {
+      safeHeaders.delete(key);
+    }
+  }
+  return safeHeaders;
+}
+
+function isSensitiveHeader(headerName: string): boolean {
+  const normalized = headerName.toLowerCase();
+  return (
+    normalized === "authorization" ||
+    normalized === "proxy-authorization" ||
+    normalized === "cookie" ||
+    normalized === "set-cookie" ||
+    normalized === "x-api-key" ||
+    normalized === "api-key" ||
+    normalized === "apikey" ||
+    normalized.includes("token") ||
+    normalized.includes("secret")
+  );
 }
 
 async function parseResponseBody<T>(response: Response): Promise<T> {
