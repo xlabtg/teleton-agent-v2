@@ -6,7 +6,9 @@
 
 import type { MemoryEntry } from "@teleton/core/domain/agent.interface.js";
 import type { MemoryRepository } from "@teleton/core/ports/repository.port.js";
+import type { GraphStore } from "./graph-store.js";
 import type { ImportanceScorer } from "./importance-scorer.js";
+import type { SemanticSearch } from "./semantic-search.js";
 
 export interface CompactionConfig {
   /** Minimum number of cold memories to trigger compaction. */
@@ -21,6 +23,11 @@ export interface CompactionResult {
   compactedCount: number;
   summariesCreated: number;
   deletedIds: string[];
+}
+
+export interface CompactionIndexes {
+  semanticSearch?: Pick<SemanticSearch, "removeFromIndex">;
+  graphStore?: Pick<GraphStore, "findNodesByType" | "removeNode">;
 }
 
 /**
@@ -52,7 +59,8 @@ export class MemoryCompaction {
     private readonly memoryRepository: MemoryRepository,
     private readonly scorer: ImportanceScorer,
     private readonly summarize: SummaryFunction = defaultSummarize,
-    config: CompactionConfig = {}
+    config: CompactionConfig = {},
+    private readonly indexes: CompactionIndexes = {}
   ) {
     this.minClusterSize = config.minClusterSize ?? 5;
     this.maxScoreForCompaction = config.maxScoreForCompaction ?? 0.3;
@@ -97,6 +105,8 @@ export class MemoryCompaction {
       // Delete the original entries
       for (const entry of group) {
         await this.memoryRepository.delete(entry.id);
+        await this.indexes.semanticSearch?.removeFromIndex(entry.id);
+        this.removeGraphNodesForMemory(entry.id);
         result.deletedIds.push(entry.id);
       }
 
@@ -135,5 +145,18 @@ export class MemoryCompaction {
     }
 
     return groups;
+  }
+
+  private removeGraphNodesForMemory(memoryId: string): void {
+    const graphStore = this.indexes.graphStore;
+    if (!graphStore) return;
+
+    for (const type of ["entity", "concept", "event"] as const) {
+      for (const node of graphStore.findNodesByType(type)) {
+        if (node.properties.memoryId === memoryId) {
+          graphStore.removeNode(node.id);
+        }
+      }
+    }
   }
 }

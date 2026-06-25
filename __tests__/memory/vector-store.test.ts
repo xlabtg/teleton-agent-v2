@@ -110,6 +110,32 @@ describe("InMemoryVectorStore", () => {
     expect(store.size()).toBe(2);
   });
 
+  it("should evict the oldest entries when maxEntries is reached", async () => {
+    store = new InMemoryVectorStore({ dimensions: 3, maxEntries: 2 });
+
+    await store.insert({ id: "a", embedding: [1, 0, 0] });
+    await store.insert({ id: "b", embedding: [0, 1, 0] });
+    await store.insert({ id: "c", embedding: [0, 0, 1] });
+
+    expect(store.size()).toBe(2);
+    const results = await store.search([1, 0, 0], 10);
+    expect(results.map((result) => result.id)).not.toContain("a");
+    expect(results.map((result) => result.id)).toEqual(expect.arrayContaining(["b", "c"]));
+  });
+
+  it("should refresh an existing entry's eviction order when overwritten", async () => {
+    store = new InMemoryVectorStore({ dimensions: 3, maxEntries: 2 });
+
+    await store.insert({ id: "a", embedding: [1, 0, 0] });
+    await store.insert({ id: "b", embedding: [0, 1, 0] });
+    await store.insert({ id: "a", embedding: [0.5, 0.5, 0] });
+    await store.insert({ id: "c", embedding: [0, 0, 1] });
+
+    const results = await store.search([1, 0, 0], 10);
+    expect(results.map((result) => result.id)).toEqual(expect.arrayContaining(["a", "c"]));
+    expect(results.map((result) => result.id)).not.toContain("b");
+  });
+
   it("should include metadata in results", async () => {
     await store.insert({
       id: "a",
