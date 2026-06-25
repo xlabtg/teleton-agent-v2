@@ -196,7 +196,7 @@ export class ScheduleStore {
       return entry;
     }
 
-    entry.triggerAt = this._nextOccurrence(entry.triggerAt, entry.recurrence);
+    entry.triggerAt = this._nextOccurrenceAfter(entry.triggerAt, entry.recurrence, firedAt);
     entry.status = "pending";
     entry.updatedAt = firedAt;
     return entry;
@@ -289,6 +289,14 @@ export class ScheduleStore {
         `User ${userId} has reached the maximum number of schedules (${this.maxEntriesPerUser})`
       );
     }
+  }
+
+  private _nextOccurrenceAfter(current: Date, rule: RecurrenceRule, after: Date): Date {
+    let next = this._nextOccurrence(current, rule);
+    while (next.getTime() <= after.getTime()) {
+      next = this._nextOccurrence(next, rule);
+    }
+    return next;
   }
 
   private _nextOccurrence(current: Date, rule: RecurrenceRule): Date {

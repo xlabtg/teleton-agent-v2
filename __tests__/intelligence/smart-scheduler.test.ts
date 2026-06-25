@@ -107,6 +107,28 @@ describe("SmartScheduler", () => {
     expect(updated!.triggerAt.getTime()).toBeGreaterThan(REF.getTime());
   });
 
+  it("should collapse missed recurring intervals into one delivery", async () => {
+    const delivered: string[] = [];
+    scheduler.registerChannel("in-app", async (payload) => {
+      delivered.push(payload.entry.action);
+    });
+
+    const entry = scheduler.createDirect({
+      userId: "u1",
+      action: "Daily standup",
+      triggerAt: new Date("2024-06-01T08:00:00Z"),
+      recurrence: { kind: "daily", intervalDays: 1 },
+    });
+
+    await scheduler.tick();
+    await scheduler.tick();
+
+    const updated = scheduler.store.get(entry.id)!;
+    expect(delivered).toEqual(["Daily standup"]);
+    expect(updated.status).toBe("pending");
+    expect(updated.triggerAt.toISOString()).toBe("2024-06-16T08:00:00.000Z");
+  });
+
   it("start() and stop() control the daemon", () => {
     expect(scheduler.isRunning).toBe(false);
     scheduler.start();
