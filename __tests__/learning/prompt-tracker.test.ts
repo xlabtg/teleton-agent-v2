@@ -87,6 +87,23 @@ describe("PromptTracker", () => {
     expect(small.getUsageRecords("k")).toHaveLength(3);
   });
 
+  it("should record delayed outcomes after usage records are evicted", () => {
+    const small = new PromptTracker({ maxUsageRecords: 1 });
+    const evicted = small.recordUsage({
+      templateKey: "k",
+      templateVersion: 1,
+      interactionId: "i1",
+    });
+    small.recordUsage({ templateKey: "k", templateVersion: 2, interactionId: "i2" });
+
+    const outcome = small.recordOutcome(evicted.id, 0.8);
+
+    expect(outcome.templateKey).toBe("k");
+    expect(outcome.templateVersion).toBe(1);
+    expect(outcome.score).toBe(0.8);
+    expect(small.getOutcomeRecords("k")).toHaveLength(1);
+  });
+
   it("should evict oldest outcomes when maxOutcomeRecords is exceeded", () => {
     const small = new PromptTracker({ maxOutcomeRecords: 3 });
 

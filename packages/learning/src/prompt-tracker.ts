@@ -49,6 +49,7 @@ export interface PromptTrackerConfig {
  */
 export class PromptTracker {
   private readonly usageRecords: PromptUsageRecord[] = [];
+  private readonly usageIndex = new Map<string, PromptUsageRecord>();
   private readonly outcomeRecords: PromptOutcomeRecord[] = [];
   private readonly maxUsageRecords: number;
   private readonly maxOutcomeRecords: number;
@@ -67,6 +68,7 @@ export class PromptTracker {
     };
 
     this.usageRecords.push(record);
+    this.usageIndex.set(record.id, record);
 
     if (this.usageRecords.length > this.maxUsageRecords) {
       this.usageRecords.shift();
@@ -80,7 +82,7 @@ export class PromptTracker {
    * Scores must be in [0, 1]; values outside this range are clamped.
    */
   recordOutcome(usageId: string, score: number): PromptOutcomeRecord {
-    const usage = this.usageRecords.find((r) => r.id === usageId);
+    const usage = this.usageIndex.get(usageId);
     if (!usage) {
       throw new Error(`Usage record '${usageId}' not found`);
     }
