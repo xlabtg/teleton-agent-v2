@@ -8,7 +8,7 @@
  *  - Progress streaming via callbacks
  */
 
-import type { CheckpointStore } from "./checkpoint-store.js";
+import type { CheckpointEntry, CheckpointStore } from "./checkpoint-store.js";
 import type { RollbackHandler } from "./rollback-handler.js";
 import {
   validatePipelineTransition,
@@ -144,8 +144,15 @@ export class ExecutionPipeline {
       const waves = buildExecutionOrder(Array.from(state.steps.values()).map((s) => s.definition));
 
       for (const wave of waves) {
+        const pendingWave = wave.filter(
+          (stepDef) => state.steps.get(stepDef.name)?.status !== "completed"
+        );
+        if (pendingWave.length === 0) continue;
+
         // All steps in a wave run concurrently.
-        await Promise.all(wave.map((stepDef) => this.executeStep(state, stepDef.name, executor)));
+        await Promise.all(
+          pendingWave.map((stepDef) => this.executeStep(state, stepDef.name, executor))
+        );
 
         // Check if any step in this wave failed (failFast mode).
         const anyFailed = wave.some((s) => state.steps.get(s.name)?.status === "failed");
@@ -166,6 +173,49 @@ export class ExecutionPipeline {
     }
 
     return state;
+  }
+
+  /**
+   * Resume a pipeline from its latest checkpoint.
+   * Completed steps from the checkpoint are not re-executed.
+   */
+  async resume(pipelineId: string, executor: StepExecutor): Promise<PipelineState> {
+    if (!this.checkpointStore) {
+      throw new Error("Cannot resume pipeline without a checkpoint store");
+    }
+
+    const checkpoint = this.checkpointStore.load(pipelineId);
+    if (!checkpoint) {
+      throw new Error(`No checkpoint found for pipeline "${pipelineId}"`);
+    }
+
+    return this.run(this.hydrateCheckpoint(checkpoint), executor);
+  }
+
+  private hydrateCheckpoint(checkpoint: CheckpointEntry): PipelineState {
+    const snapshot = checkpoint.snapshot;
+    const steps = new Map<string, StepState>();
+
+    for (const [name, value] of Object.entries(snapshot.steps)) {
+      const step = value as StepState;
+      steps.set(name, {
+        ...step,
+        definition: { ...step.definition },
+        status: step.status === "running" ? "pending" : step.status,
+        startedAt: step.startedAt ? new Date(step.startedAt) : undefined,
+        completedAt: step.completedAt ? new Date(step.completedAt) : undefined,
+      });
+    }
+
+    return {
+      id: snapshot.id,
+      name: snapshot.name,
+      status: "pending",
+      steps,
+      createdAt: new Date(snapshot.createdAt),
+      updatedAt: new Date(snapshot.updatedAt),
+      context: structuredClone(snapshot.context),
+    };
   }
 
   private async executeStep(
