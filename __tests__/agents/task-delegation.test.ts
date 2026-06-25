@@ -185,13 +185,14 @@ describe("ResultAggregator", () => {
 
   it("should produce successful aggregation when all subtasks succeed", () => {
     const agg = new ResultAggregator();
+    const startedAt = new Date("2026-01-01T00:00:00.000Z").getTime();
     agg.record({
       subtaskId: "s1",
       agentId: "a1",
       status: "success",
       output: { x: 1 },
       durationMs: 100,
-      completedAt: new Date(),
+      completedAt: new Date(startedAt + 100),
     });
     agg.record({
       subtaskId: "s2",
@@ -199,13 +200,36 @@ describe("ResultAggregator", () => {
       status: "success",
       output: { y: 2 },
       durationMs: 200,
-      completedAt: new Date(),
+      completedAt: new Date(startedAt + 300),
     });
     const result = agg.aggregate("task-1");
     expect(result.success).toBe(true);
     expect(result.failures.length).toBe(0);
     expect(Object.keys(result.outputs).length).toBe(2);
     expect(result.totalDurationMs).toBe(300);
+  });
+
+  it("should report wall-clock duration instead of summing overlapping subtask durations", () => {
+    const agg = new ResultAggregator();
+    const startedAt = new Date("2026-01-01T00:00:00.000Z").getTime();
+    agg.record({
+      subtaskId: "s1",
+      agentId: "a1",
+      status: "success",
+      output: { x: 1 },
+      durationMs: 1_000,
+      completedAt: new Date(startedAt + 1_000),
+    });
+    agg.record({
+      subtaskId: "s2",
+      agentId: "a2",
+      status: "success",
+      output: { y: 2 },
+      durationMs: 1_000,
+      completedAt: new Date(startedAt + 1_200),
+    });
+
+    expect(agg.aggregate("task-1").totalDurationMs).toBe(1_200);
   });
 
   it("should fail when any subtask fails (failFast=true default)", () => {
