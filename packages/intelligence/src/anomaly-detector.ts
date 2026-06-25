@@ -5,7 +5,7 @@
  * is routed through the AlertRouter and an InvestigationContext is assembled.
  */
 
-import type { BaselineProfiler } from "./baseline-profiler.js";
+import type { BaselineProfiler, BaselineStats } from "./baseline-profiler.js";
 import type { AlertRouter, AlertSeverity } from "./alert-router.js";
 import type { InvestigationContextBuilder, InvestigationContext } from "./investigation-context.js";
 
@@ -108,7 +108,7 @@ export class AnomalyDetector {
       severity,
       message: `Anomalous value ${value.toFixed(4)} detected (${deviation.toFixed(1)}σ from mean ${baseline.mean.toFixed(4)}) via ${detectionMethod ?? "combined"} method.`,
       value,
-      threshold: baseline.mean + this.zScoreThreshold * baseline.stdDev,
+      threshold: this.getViolatedThreshold(value, baseline, iqrAnomaly),
     });
 
     const context = this.contextBuilder.build(alert, baseline);
@@ -127,5 +127,21 @@ export class AnomalyDetector {
     if (sigma >= 4.5) return "high";
     if (sigma >= 3) return "medium";
     return "low";
+  }
+
+  private getViolatedThreshold(
+    value: number,
+    baseline: BaselineStats,
+    iqrAnomaly: boolean
+  ): number {
+    if (iqrAnomaly) {
+      return value < baseline.q1
+        ? baseline.q1 - this.iqrMultiplier * baseline.iqr
+        : baseline.q3 + this.iqrMultiplier * baseline.iqr;
+    }
+
+    return value < baseline.mean
+      ? baseline.mean - this.zScoreThreshold * baseline.stdDev
+      : baseline.mean + this.zScoreThreshold * baseline.stdDev;
   }
 }
