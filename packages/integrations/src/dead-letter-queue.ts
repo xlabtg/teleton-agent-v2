@@ -72,10 +72,19 @@ export interface DeadLetterQueueConfig {
   retryMaxDelayMs?: number;
   /**
    * Maximum number of entries to retain.
-   * When the limit is exceeded the oldest entries are dropped.
+   * When the limit is reached, replayed entries are purged first.
+   * If all retained entries are still pending, enqueue throws instead of
+   * silently dropping recoverable failures.
    * Defaults to 500.
    */
   maxEntries?: number;
+}
+
+export class DeadLetterQueueFullError extends Error {
+  constructor(maxEntries: number) {
+    super(`Dead letter queue is full (${maxEntries} pending entries)`);
+    this.name = "DeadLetterQueueFullError";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -112,8 +121,16 @@ export class DeadLetterQueue {
 
   /**
    * Add a failed event to the queue.
+   * @throws DeadLetterQueueFullError when the queue is full of pending entries.
    */
   enqueue(event: TypedEvent, errorMessage: string, handlerName?: string): DeadLetterEntry {
+    if (this.entries.length >= this.maxEntries) {
+      this.purgeReplayed();
+    }
+    if (this.entries.length >= this.maxEntries) {
+      throw new DeadLetterQueueFullError(this.maxEntries);
+    }
+
     const entry: DeadLetterEntry = {
       id: `dlq-${Date.now()}-${++this._entryCounter}`,
       event,
@@ -125,9 +142,6 @@ export class DeadLetterQueue {
       ...(handlerName ? { handlerName } : {}),
     };
     this.entries.push(entry);
-    if (this.entries.length > this.maxEntries) {
-      this.entries.shift();
-    }
     return entry;
   }
 
