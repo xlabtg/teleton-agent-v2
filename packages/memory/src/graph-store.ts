@@ -35,7 +35,15 @@ export interface GraphEdge {
 
 export interface GraphStore {
   addNode(node: Omit<GraphNode, "id" | "createdAt" | "accessedAt">): GraphNode;
+  /**
+   * Read a node without updating recency metadata.
+   * `accessedAt` tracks explicit access via `touchNode` or mutations, not internal traversal.
+   */
   getNode(id: string): GraphNode | undefined;
+  /**
+   * Mark a node as explicitly accessed.
+   */
+  touchNode(id: string): GraphNode | undefined;
   findNodesByLabel(label: string): GraphNode[];
   findNodesByType(type: NodeType): GraphNode[];
   updateNode(
@@ -96,9 +104,13 @@ export class InMemoryGraphStore implements GraphStore {
 
   getNode(id: string): GraphNode | undefined {
     const node = this.nodes.get(id);
-    if (node) {
-      node.accessedAt = new Date();
-    }
+    return node;
+  }
+
+  touchNode(id: string): GraphNode | undefined {
+    const node = this.nodes.get(id);
+    if (!node) return undefined;
+    node.accessedAt = new Date();
     return node;
   }
 
