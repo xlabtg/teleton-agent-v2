@@ -15,7 +15,7 @@
  * If any step fails the responder sends REJECT and the session is aborted.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   SUPPORTED_VERSIONS,
   negotiateVersion,
@@ -89,6 +89,10 @@ export interface AgentSession {
   issuedNonce?: string;
   /** Peer nonce this agent must echo in the next handshake step. */
   expectedPeerNonce?: string;
+  /** Public key or token that authenticated the peer. */
+  authenticatedPeerKey?: string;
+  /** Whether peer identity has been verified for this session. */
+  isAuthenticated: boolean;
 }
 
 // ─── Handshake errors ─────────────────────────────────────────────────────────
@@ -128,6 +132,12 @@ export interface HandshakeManagerConfig {
    * Namespace. Default: "default".
    */
   namespace?: string;
+  /** Local public key or shared token advertised to trusted peers. */
+  senderPublicKey?: string;
+  /** Public keys or shared tokens accepted from remote agents. */
+  trustedPeerPublicKeys?: string[];
+  /** Secret used to produce and verify trustProof HMAC values. */
+  trustProofSecret?: string;
 }
 
 /**
@@ -159,6 +169,9 @@ export class HandshakeManager {
   private readonly supportedVersions: string[];
   private readonly sessionTimeoutMs: number;
   private readonly namespace: string;
+  private readonly senderPublicKey?: string;
+  private readonly trustedPeerPublicKeys: Set<string>;
+  private readonly trustProofSecret?: string;
 
   constructor(config: HandshakeManagerConfig) {
     this.agentId = config.agentId;
@@ -166,6 +179,9 @@ export class HandshakeManager {
     this.supportedVersions = config.supportedVersions ?? [...SUPPORTED_VERSIONS];
     this.sessionTimeoutMs = config.sessionTimeoutMs ?? 30_000;
     this.namespace = config.namespace ?? DEFAULT_NAMESPACE;
+    this.senderPublicKey = config.senderPublicKey;
+    this.trustedPeerPublicKeys = new Set(config.trustedPeerPublicKeys ?? []);
+    this.trustProofSecret = config.trustProofSecret;
   }
 
   // ── Initiator side ─────────────────────────────────────────────────────────
@@ -191,6 +207,7 @@ export class HandshakeManager {
       updatedAt: now,
       namespace: this.namespace,
       issuedNonce: nonce,
+      isAuthenticated: false,
     };
 
     this.sessions.set(sessionId, session);
@@ -202,6 +219,12 @@ export class HandshakeManager {
         supportedVersions: [...this.supportedVersions],
         capabilities: { ...this.capabilities },
         nonce,
+        senderPublicKey: this.senderPublicKey,
+        trustProof: this.createTrustProof("HELLO", {
+          initiatorId: this.agentId,
+          responderId: remoteAgentId,
+          nonce,
+        }),
       },
     };
   }
@@ -230,6 +253,18 @@ export class HandshakeManager {
     }
     this.consumeExpectedNonce(ack.echoNonce, session.issuedNonce, "HELLO_ACK");
 
+    const ackAuth = this.verifyPeerProof("HELLO_ACK", ack, {
+      initiatorId: session.initiatorId,
+      responderId: session.responderId,
+      nonce: ack.nonce,
+      echoNonce: ack.echoNonce,
+    });
+    if (!ackAuth.ok) {
+      session.status = "rejected";
+      session.updatedAt = new Date();
+      throw new HandshakeError(ackAuth.reason, ProtocolErrorCode.SIGNATURE_INVALID);
+    }
+
     const remoteVersions = ack.supportedVersions ?? [];
     const agreed = negotiateVersion(this.supportedVersions, remoteVersions);
     if (!agreed) {
@@ -243,6 +278,7 @@ export class HandshakeManager {
     session.protocolVersion = agreed;
     session.responderCapabilities = ack.capabilities ?? {};
     session.expectedPeerNonce = ack.nonce;
+    session.authenticatedPeerKey = ack.senderPublicKey;
     session.status = "hello_acked";
     session.updatedAt = new Date();
 
@@ -252,6 +288,14 @@ export class HandshakeManager {
       capabilities: { ...this.capabilities },
       nonce: session.expectedPeerNonce,
       echoNonce: session.expectedPeerNonce,
+      senderPublicKey: this.senderPublicKey,
+      trustProof: this.createTrustProof("CONFIRM", {
+        initiatorId: session.initiatorId,
+        responderId: session.responderId,
+        negotiatedVersion: agreed,
+        nonce: session.expectedPeerNonce,
+        echoNonce: session.expectedPeerNonce,
+      }),
     };
   }
 
@@ -277,6 +321,18 @@ export class HandshakeManager {
         ProtocolErrorCode.MALFORMED_MESSAGE
       );
     }
+
+    const confirmAckAuth = this.verifyPeerProof("CONFIRM_ACK", confirmAck, {
+      initiatorId: session.initiatorId,
+      responderId: session.responderId,
+      negotiatedVersion: confirmAck.negotiatedVersion,
+    });
+    if (!confirmAckAuth.ok) {
+      session.status = "rejected";
+      session.updatedAt = new Date();
+      throw new HandshakeError(confirmAckAuth.reason, ProtocolErrorCode.SIGNATURE_INVALID);
+    }
+
     if (confirmAck.nonce) {
       this.markInboundNonceConsumed(confirmAck.nonce);
     }
@@ -314,6 +370,7 @@ export class HandshakeManager {
         createdAt: now,
         updatedAt: now,
         namespace: this.namespace,
+        isAuthenticated: false,
       };
       this.sessions.set(sessionId, session);
 
@@ -325,6 +382,29 @@ export class HandshakeManager {
           errorCode: ProtocolErrorCode.VERSION_MISMATCH,
         },
       };
+    }
+
+    const helloAuth = this.verifyPeerProof("HELLO", hello, {
+      initiatorId,
+      responderId: this.agentId,
+      nonce: hello.nonce,
+    });
+    if (!helloAuth.ok) {
+      const session: AgentSession = {
+        sessionId,
+        initiatorId,
+        responderId: this.agentId,
+        protocolVersion: agreed,
+        responderCapabilities: {},
+        status: "rejected",
+        createdAt: now,
+        updatedAt: now,
+        namespace: this.namespace,
+        isAuthenticated: false,
+      };
+      this.sessions.set(sessionId, session);
+
+      return { sessionId, payload: this.rejectPayload(helloAuth.reason) };
     }
 
     const nonce = this.generateNonce();
@@ -340,6 +420,8 @@ export class HandshakeManager {
       namespace: this.namespace,
       issuedNonce: nonce,
       expectedPeerNonce: hello.nonce,
+      authenticatedPeerKey: hello.senderPublicKey,
+      isAuthenticated: true,
     };
     this.sessions.set(sessionId, session);
 
@@ -351,6 +433,13 @@ export class HandshakeManager {
         capabilities: { ...this.capabilities },
         nonce,
         echoNonce: hello.nonce,
+        senderPublicKey: this.senderPublicKey,
+        trustProof: this.createTrustProof("HELLO_ACK", {
+          initiatorId,
+          responderId: this.agentId,
+          nonce,
+          echoNonce: hello.nonce,
+        }),
       },
     };
   }
@@ -370,6 +459,19 @@ export class HandshakeManager {
     }
     this.consumeExpectedNonce(confirm.echoNonce ?? confirm.nonce, session.issuedNonce, "CONFIRM");
 
+    const confirmAuth = this.verifyPeerProof("CONFIRM", confirm, {
+      initiatorId: session.initiatorId,
+      responderId: session.responderId,
+      negotiatedVersion: confirm.negotiatedVersion,
+      nonce: confirm.nonce,
+      echoNonce: confirm.echoNonce,
+    });
+    if (!confirmAuth.ok) {
+      session.status = "rejected";
+      session.updatedAt = new Date();
+      return this.rejectPayload(confirmAuth.reason);
+    }
+
     // Verify the negotiated version matches what we agreed on
     if (confirm.negotiatedVersion && confirm.negotiatedVersion !== session.protocolVersion) {
       session.status = "rejected";
@@ -383,7 +485,16 @@ export class HandshakeManager {
 
     session.status = "confirmed";
     session.updatedAt = new Date();
-    return { step: "CONFIRM_ACK", negotiatedVersion: session.protocolVersion ?? undefined };
+    return {
+      step: "CONFIRM_ACK",
+      negotiatedVersion: session.protocolVersion ?? undefined,
+      senderPublicKey: this.senderPublicKey,
+      trustProof: this.createTrustProof("CONFIRM_ACK", {
+        initiatorId: session.initiatorId,
+        responderId: session.responderId,
+        negotiatedVersion: session.protocolVersion ?? undefined,
+      }),
+    };
   }
 
   // ── Session management ──────────────────────────────────────────────────────
@@ -421,6 +532,67 @@ export class HandshakeManager {
 
   private generateNonce(): string {
     return randomUUID();
+  }
+
+  private authRequired(): boolean {
+    return this.trustedPeerPublicKeys.size > 0 || this.trustProofSecret !== undefined;
+  }
+
+  private createTrustProof(
+    step: HandshakeStep,
+    fields: Record<string, string | undefined>
+  ): string | undefined {
+    if (!this.trustProofSecret) return undefined;
+    return createHmac("sha256", this.trustProofSecret)
+      .update(this.canonicalProofPayload(step, fields))
+      .digest("base64");
+  }
+
+  private verifyPeerProof(
+    step: HandshakeStep,
+    payload: HandshakePayload,
+    fields: Record<string, string | undefined>
+  ): { ok: true } | { ok: false; reason: string } {
+    if (!this.authRequired()) return { ok: true };
+    if (!payload.senderPublicKey)
+      return { ok: false, reason: `${step} is missing senderPublicKey` };
+    if (!this.trustedPeerPublicKeys.has(payload.senderPublicKey)) {
+      return { ok: false, reason: `${step} senderPublicKey is not trusted` };
+    }
+    if (!this.trustProofSecret) return { ok: true };
+    if (!payload.trustProof) return { ok: false, reason: `${step} is missing trustProof` };
+
+    const expected = this.createTrustProof(step, fields);
+    if (!expected || !this.constantTimeEqual(payload.trustProof, expected)) {
+      return { ok: false, reason: `${step} trustProof is invalid` };
+    }
+    return { ok: true };
+  }
+
+  private canonicalProofPayload(
+    step: HandshakeStep,
+    fields: Record<string, string | undefined>
+  ): string {
+    const normalized = Object.entries(fields)
+      .filter((entry): entry is [string, string] => entry[1] !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return JSON.stringify({ step, fields: Object.fromEntries(normalized) });
+  }
+
+  private constantTimeEqual(actual: string, expected: string): boolean {
+    const actualBuffer = Buffer.from(actual);
+    const expectedBuffer = Buffer.from(expected);
+    return (
+      actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+    );
+  }
+
+  private rejectPayload(reason: string): HandshakePayload {
+    return {
+      step: "REJECT",
+      reason,
+      errorCode: ProtocolErrorCode.SIGNATURE_INVALID,
+    };
   }
 
   private consumeRequiredInboundNonce(nonce: string | undefined, step: HandshakeStep): void {

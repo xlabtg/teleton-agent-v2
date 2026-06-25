@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { createHmac } from "node:crypto";
 import { HandshakeManager, HandshakeError } from "../../packages/network/src/handshake.js";
+import { ProtocolErrorCode } from "../../packages/network/src/protocol.js";
 
 function makeManagers() {
   const initiator = new HandshakeManager({
@@ -11,6 +13,32 @@ function makeManagers() {
     capabilities: { "ton-transfer": "Transfers TON" },
   });
   return { initiator, responder };
+}
+
+function proof(secret: string, step: string, fields: Record<string, string | undefined>): string {
+  const normalized = Object.entries(fields)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return createHmac("sha256", secret)
+    .update(JSON.stringify({ step, fields: Object.fromEntries(normalized) }))
+    .digest("base64");
+}
+
+function makeAuthenticatedManagers() {
+  const secret = "shared-secret";
+  const initiator = new HandshakeManager({
+    agentId: "agent-a",
+    senderPublicKey: "agent-a-key",
+    trustedPeerPublicKeys: ["agent-b-key"],
+    trustProofSecret: secret,
+  });
+  const responder = new HandshakeManager({
+    agentId: "agent-b",
+    senderPublicKey: "agent-b-key",
+    trustedPeerPublicKeys: ["agent-a-key"],
+    trustProofSecret: secret,
+  });
+  return { initiator, responder, secret };
 }
 
 describe("HandshakeManager", () => {
@@ -52,6 +80,127 @@ describe("HandshakeManager", () => {
 
       const responderSession = responder.getSession(respSessionId)!;
       expect(responderSession.status).toBe("confirmed");
+    });
+  });
+
+  describe("mutual authentication", () => {
+    it("should complete a trusted handshake and bind peer identity to the session", () => {
+      const { initiator, responder } = makeAuthenticatedManagers();
+
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const confirm = initiator.handleHelloAck(initSessionId, ack);
+      const confirmAck = responder.handleConfirm(respSessionId, confirm);
+      initiator.handleConfirmAck(initSessionId, confirmAck);
+
+      const responderSession = responder.getSession(respSessionId)!;
+      expect(responderSession.status).toBe("confirmed");
+      expect(responderSession.isAuthenticated).toBe(true);
+      expect(responderSession.authenticatedPeerKey).toBe("agent-a-key");
+    });
+
+    it("should reject HELLO when senderPublicKey and trustProof are absent", () => {
+      const responder = new HandshakeManager({
+        agentId: "agent-b",
+        trustedPeerPublicKeys: ["agent-a-key"],
+        trustProofSecret: "shared-secret",
+      });
+
+      const { payload } = responder.handleHello(
+        { step: "HELLO", supportedVersions: ["1.0.0"], nonce: "hello-nonce" },
+        "agent-a"
+      );
+
+      expect(payload.step).toBe("REJECT");
+      expect(payload.errorCode).toBe(ProtocolErrorCode.SIGNATURE_INVALID);
+    });
+
+    it("should reject HELLO from an untrusted senderPublicKey", () => {
+      const responder = new HandshakeManager({
+        agentId: "agent-b",
+        trustedPeerPublicKeys: ["agent-a-key"],
+        trustProofSecret: "shared-secret",
+      });
+
+      const { payload } = responder.handleHello(
+        {
+          step: "HELLO",
+          supportedVersions: ["1.0.0"],
+          nonce: "hello-nonce",
+          senderPublicKey: "attacker-key",
+          trustProof: proof("shared-secret", "HELLO", {
+            initiatorId: "agent-a",
+            responderId: "agent-b",
+            nonce: "hello-nonce",
+          }),
+        },
+        "agent-a"
+      );
+
+      expect(payload.step).toBe("REJECT");
+      expect(payload.errorCode).toBe(ProtocolErrorCode.SIGNATURE_INVALID);
+    });
+
+    it("should reject forged HELLO trustProof values", () => {
+      const responder = new HandshakeManager({
+        agentId: "agent-b",
+        trustedPeerPublicKeys: ["agent-a-key"],
+        trustProofSecret: "shared-secret",
+      });
+
+      const { payload } = responder.handleHello(
+        {
+          step: "HELLO",
+          supportedVersions: ["1.0.0"],
+          nonce: "hello-nonce",
+          senderPublicKey: "agent-a-key",
+          trustProof: "forged",
+        },
+        "agent-a"
+      );
+
+      expect(payload.step).toBe("REJECT");
+      expect(payload.errorCode).toBe(ProtocolErrorCode.SIGNATURE_INVALID);
+    });
+
+    it("should reject forged CONFIRM trustProof values", () => {
+      const { initiator, responder } = makeAuthenticatedManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const confirm = initiator.handleHelloAck(initSessionId, ack);
+
+      const rejectAck = responder.handleConfirm(respSessionId, {
+        ...confirm,
+        trustProof: "forged",
+      });
+
+      expect(rejectAck.step).toBe("REJECT");
+      expect(rejectAck.errorCode).toBe(ProtocolErrorCode.SIGNATURE_INVALID);
+      expect(responder.getSession(respSessionId)?.status).toBe("rejected");
+    });
+
+    it("should reject forged HELLO_ACK trustProof values", () => {
+      const { initiator, responder } = makeAuthenticatedManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { payload: ack } = responder.handleHello(hello, "agent-a");
+
+      expect(() =>
+        initiator.handleHelloAck(initSessionId, { ...ack, trustProof: "forged" })
+      ).toThrow(HandshakeError);
+      expect(initiator.getSession(initSessionId)?.status).toBe("rejected");
+    });
+
+    it("should reject forged CONFIRM_ACK trustProof values", () => {
+      const { initiator, responder } = makeAuthenticatedManagers();
+      const { sessionId: initSessionId, payload: hello } = initiator.initiateHandshake("agent-b");
+      const { sessionId: respSessionId, payload: ack } = responder.handleHello(hello, "agent-a");
+      const confirm = initiator.handleHelloAck(initSessionId, ack);
+      const confirmAck = responder.handleConfirm(respSessionId, confirm);
+
+      expect(() =>
+        initiator.handleConfirmAck(initSessionId, { ...confirmAck, trustProof: "forged" })
+      ).toThrow(HandshakeError);
+      expect(initiator.getSession(initSessionId)?.status).toBe("rejected");
     });
   });
 
