@@ -103,6 +103,24 @@ describe("TimeParser", () => {
         expect(result.date.getTime()).toBeLessThan(REF.getTime());
       }
     });
+
+    it("should keep today's weekday when the requested time is still ahead", () => {
+      const result = parser().parse("saturday at 5pm");
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-06-15T17:00:00.000Z");
+        expect(result.offsetMs).toBe(5 * 3_600_000);
+      }
+    });
+
+    it("should advance today's weekday by one week when the requested time has passed", () => {
+      const result = parser().parse("saturday at 9am");
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-06-22T09:00:00.000Z");
+        expect(result.offsetMs).toBe(6 * 86_400_000 + 21 * 3_600_000);
+      }
+    });
   });
 
   describe("absolute ISO dates", () => {
