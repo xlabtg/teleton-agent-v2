@@ -1,19 +1,22 @@
 /**
  * Prompt optimizer — V2-20.
- * Implements a gradient-free optimization loop that automatically promotes
- * the best-performing template version based on outcome scores from
+ * Implements a gradient-free optimization loop that proposes the
+ * best-performing template version based on outcome scores from
  * PromptTracker.
  *
  * The algorithm is intentionally simple and conservative:
  *  1. Compute the mean score for each version of a template.
  *  2. If a non-active version outperforms the active version by at least
- *     `minImprovementDelta`, promote it and record the change.
+ *     `minImprovementDelta`, record it as a promotion candidate.
  *  3. A human-readable diff between the old and new template is generated
- *     to aid review before promotions are applied in production.
+ *     to aid review before promotions are explicitly approved.
  *
  * Safety:
- *  - Templates tagged as safety-critical are never auto-promoted.
- *  - Promotions are recorded with a full audit trail so they can be reverted.
+ *  - Promotions are never applied by optimize(); an explicit approval step
+ *    must call applyPromotionCandidate().
+ *  - Templates must be opted in before they are eligible for candidates.
+ *  - Applied promotions are recorded with a full audit trail so they can be
+ *    reverted.
  */
 
 import type { PromptRegistry } from "./prompt-registry.js";
@@ -28,13 +31,19 @@ export interface OptimizationResult {
   /** Simple line-level diff between old and new template text. */
   diff: string;
   optimizedAt: Date;
+  /** Whether the candidate has been explicitly applied to the registry. */
+  applied: boolean;
+  /** Time the candidate was applied, if approved. */
+  appliedAt: Date | null;
 }
 
 export interface OptimizationRun {
   id: string;
   startedAt: Date;
   completedAt: Date;
+  /** Historical name retained for callers; these are pending candidates. */
   promotions: OptimizationResult[];
+  promotionCandidates: OptimizationResult[];
   skippedKeys: string[];
 }
 
@@ -51,6 +60,11 @@ export interface PromptOptimizerConfig {
   minSampleSize?: number;
   /** Template keys that must never be auto-promoted. */
   safetyCriticalKeys?: string[];
+  /**
+   * Template keys eligible for optimization candidates. Empty means no keys
+   * are eligible, keeping promotion decisions default-deny.
+   */
+  promotionEligibleKeys?: string[];
 }
 
 /** Produce a minimal line-level diff (added/removed lines) between two texts. */
@@ -72,6 +86,7 @@ export class PromptOptimizer {
   private readonly minImprovementDelta: number;
   private readonly minSampleSize: number;
   private readonly safetyCriticalKeys: Set<string>;
+  private readonly promotionEligibleKeys: Set<string>;
   private readonly runs: OptimizationRun[] = [];
 
   constructor(
@@ -84,21 +99,27 @@ export class PromptOptimizer {
     this.minImprovementDelta = config.minImprovementDelta ?? 0.05;
     this.minSampleSize = config.minSampleSize ?? 10;
     this.safetyCriticalKeys = new Set(config.safetyCriticalKeys ?? []);
+    this.promotionEligibleKeys = new Set(config.promotionEligibleKeys ?? []);
   }
 
   /**
    * Run one optimization pass across all registered templates.
-   * Returns a run record that includes every promotion that was made and
+   * Returns a run record that includes every promotion candidate found and
    * every key that was skipped (with the reason encoded as a comment in the
    * skippedKeys array for observability).
    */
   optimize(): OptimizationRun {
     const startedAt = new Date();
-    const promotions: OptimizationResult[] = [];
+    const promotionCandidates: OptimizationResult[] = [];
     const skippedKeys: string[] = [];
 
     for (const template of this.registry.list()) {
       const key = template.key;
+
+      if (!this.promotionEligibleKeys.has(key)) {
+        skippedKeys.push(`${key} (promotion not enabled)`);
+        continue;
+      }
 
       if (this.safetyCriticalKeys.has(key)) {
         skippedKeys.push(`${key} (safety-critical)`);
@@ -153,10 +174,7 @@ export class PromptOptimizer {
       const newTemplateText = this.registry.getVersion(key, best.version)?.template ?? "";
       const diff = simpleDiff(oldTemplateText, newTemplateText);
 
-      // Promote the winner
-      this.registry.promote(key, best.version);
-
-      promotions.push({
+      promotionCandidates.push({
         templateKey: key,
         previousVersion: currentActiveVersion,
         promotedVersion: best.version,
@@ -164,6 +182,8 @@ export class PromptOptimizer {
         newScore: bestScore,
         diff,
         optimizedAt: new Date(),
+        applied: false,
+        appliedAt: null,
       });
     }
 
@@ -171,7 +191,8 @@ export class PromptOptimizer {
       id: crypto.randomUUID(),
       startedAt,
       completedAt: new Date(),
-      promotions,
+      promotions: promotionCandidates,
+      promotionCandidates,
       skippedKeys,
     };
 
@@ -196,5 +217,32 @@ export class PromptOptimizer {
 
   isSafetyCritical(templateKey: string): boolean {
     return this.safetyCriticalKeys.has(templateKey);
+  }
+
+  /** Mark a template key as eligible for optimization candidates. */
+  enablePromotionCandidates(templateKey: string): void {
+    this.promotionEligibleKeys.add(templateKey);
+  }
+
+  isPromotionCandidateEnabled(templateKey: string): boolean {
+    return this.promotionEligibleKeys.has(templateKey);
+  }
+
+  /**
+   * Explicitly approve and apply a candidate produced by optimize().
+   * This separates score aggregation from the mutating production change.
+   */
+  applyPromotionCandidate(candidate: OptimizationResult): OptimizationResult {
+    if (!this.promotionEligibleKeys.has(candidate.templateKey)) {
+      throw new Error(`Promotion candidates are not enabled for '${candidate.templateKey}'`);
+    }
+    if (this.safetyCriticalKeys.has(candidate.templateKey)) {
+      throw new Error(`Template '${candidate.templateKey}' is safety-critical`);
+    }
+
+    this.registry.promote(candidate.templateKey, candidate.promotedVersion);
+    candidate.applied = true;
+    candidate.appliedAt = new Date();
+    return candidate;
   }
 }
