@@ -190,7 +190,7 @@ export class ScheduleStore {
     const entry = this.entries.get(id);
     if (!entry) throw new Error(`Schedule entry not found: ${id}`);
 
-    if (entry.recurrence.kind === "once") {
+    if (entry.recurrence.kind === "once" || !this._isAdvancingRecurrence(entry.recurrence)) {
       entry.status = "triggered";
       entry.updatedAt = firedAt;
       return entry;
@@ -297,6 +297,21 @@ export class ScheduleStore {
       next = this._nextOccurrence(next, rule);
     }
     return next;
+  }
+
+  private _isAdvancingRecurrence(rule: RecurrenceRule): boolean {
+    switch (rule.kind) {
+      case "daily":
+        return rule.intervalDays >= 1;
+      case "weekly":
+        return rule.intervalWeeks >= 1;
+      case "monthly":
+        return rule.dayOfMonth >= 1;
+      case "cron":
+        return true;
+      case "once":
+        return false;
+    }
   }
 
   private _nextOccurrence(current: Date, rule: RecurrenceRule): Date {
