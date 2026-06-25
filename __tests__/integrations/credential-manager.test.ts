@@ -32,6 +32,32 @@ describe("CredentialManager", () => {
       const mgr = new CredentialManager();
       expect(() => mgr.set("", "value")).toThrow(ConfigurationError);
     });
+
+    it("should not retain a mutable reference to credentials passed to set()", () => {
+      const mgr = new CredentialManager();
+      const credential = { apiKey: "sk-test", nested: { scope: "read" } };
+
+      mgr.set("openai", credential);
+      credential.apiKey = "mutated";
+      credential.nested.scope = "write";
+
+      expect(mgr.get("openai")).toEqual({ apiKey: "sk-test", nested: { scope: "read" } });
+    });
+
+    it("should return defensive copies from get()", () => {
+      const mgr = new CredentialManager();
+      mgr.set("openai", { apiKey: "sk-test", nested: { scope: "read" } });
+
+      const credential = mgr.get("openai") as { apiKey: string; nested: { scope: string } };
+      expect(() => {
+        credential.apiKey = "mutated";
+      }).toThrow(TypeError);
+      expect(() => {
+        credential.nested.scope = "write";
+      }).toThrow(TypeError);
+
+      expect(mgr.get("openai")).toEqual({ apiKey: "sk-test", nested: { scope: "read" } });
+    });
   });
 
   describe("has / delete", () => {
@@ -73,6 +99,27 @@ describe("CredentialManager", () => {
       const mgr = new CredentialManager({ initial: { telegram: "bot-token" } });
       expect(mgr.get("telegram")).toBe("bot-token");
     });
+
+    it("should not retain mutable references from initial config", () => {
+      const credential = { token: "bot-token", nested: { scope: "send" } };
+      const mgr = new CredentialManager({ initial: { telegram: credential } });
+
+      credential.token = "mutated";
+      credential.nested.scope = "admin";
+
+      expect(mgr.get("telegram")).toEqual({ token: "bot-token", nested: { scope: "send" } });
+    });
+  });
+
+  describe("encryptionKey", () => {
+    it("should retrieve credentials when in-memory encryption is enabled", () => {
+      const mgr = new CredentialManager({
+        encryptionKey: "test-key",
+        initial: { openai: { apiKey: "sk-test" } },
+      });
+
+      expect(mgr.get("openai")).toEqual({ apiKey: "sk-test" });
+    });
   });
 
   describe("getRecord()", () => {
@@ -83,6 +130,31 @@ describe("CredentialManager", () => {
       expect(typeof record.rotatedAt).toBe("string");
       expect(record.value).toBe("val");
     });
+
+    it("should return a defensive copy of the record and metadata", () => {
+      const mgr = new CredentialManager();
+      mgr.set("svc", { apiKey: "sk-test" }, { expiresAt: "tomorrow", nested: { scope: "read" } });
+
+      const record = mgr.getRecord("svc") as unknown as CredentialRecordForTest;
+      expect(() => {
+        record.serviceId = "other";
+      }).toThrow(TypeError);
+      expect(() => {
+        record.value.apiKey = "mutated";
+      }).toThrow(TypeError);
+      expect(() => {
+        record.meta.expiresAt = "yesterday";
+      }).toThrow(TypeError);
+      expect(() => {
+        record.meta.nested.scope = "write";
+      }).toThrow(TypeError);
+
+      expect(mgr.getRecord("svc")).toMatchObject({
+        serviceId: "svc",
+        value: { apiKey: "sk-test" },
+        meta: { expiresAt: "tomorrow", nested: { scope: "read" } },
+      });
+    });
   });
 
   describe("listServices()", () => {
@@ -92,3 +164,9 @@ describe("CredentialManager", () => {
     });
   });
 });
+
+interface CredentialRecordForTest {
+  serviceId: string;
+  value: { apiKey: string };
+  meta: { expiresAt: string; nested: { scope: string } };
+}
