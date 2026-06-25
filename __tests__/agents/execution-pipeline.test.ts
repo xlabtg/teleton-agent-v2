@@ -5,6 +5,7 @@ import {
   type CheckpointEntry,
   type CheckpointStore,
 } from "../../packages/agents/src/checkpoint-store.js";
+import type { PipelineState } from "../../packages/agents/src/pipeline-state.js";
 import { RollbackHandler } from "../../packages/agents/src/rollback-handler.js";
 
 // ── ExecutionPipeline ────────────────────────────────────────────────────────
@@ -203,7 +204,7 @@ describe("ExecutionPipeline", () => {
 describe("InMemoryCheckpointStore", () => {
   it("should save and load a checkpoint", () => {
     const store = new InMemoryCheckpointStore();
-    const state = {
+    const state: PipelineState = {
       id: "p1",
       name: "test",
       status: "running" as const,
@@ -231,6 +232,46 @@ describe("InMemoryCheckpointStore", () => {
     };
     for (let i = 0; i < 5; i++) store.save(state);
     expect(store.listCheckpoints("p1").length).toBe(3);
+  });
+
+  it("should keep saved snapshots unchanged after later state mutations", () => {
+    const store = new InMemoryCheckpointStore();
+    const output = { nested: { value: "initial" } };
+    const state = {
+      id: "p1",
+      name: "t",
+      status: "running" as const,
+      steps: new Map([
+        [
+          "step-a",
+          {
+            definition: { name: "step-a" },
+            status: "completed" as const,
+            attempt: 1,
+            output,
+          },
+        ],
+      ]),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      context: {
+        input: { nested: { value: "initial" } },
+      } as Record<string, unknown>,
+    };
+
+    store.save(state);
+    const checkpoint = store.load("p1")!;
+
+    (state.context.input as { nested: { value: string } }).nested.value = "mutated";
+    output.nested.value = "mutated";
+    state.context["step.step-a.output"] = output;
+
+    expect(checkpoint.snapshot.context).toEqual({
+      input: { nested: { value: "initial" } },
+    });
+    expect(checkpoint.snapshot.steps["step-a"]).toMatchObject({
+      output: { nested: { value: "initial" } },
+    });
   });
 });
 
