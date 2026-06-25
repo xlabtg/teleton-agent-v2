@@ -6,6 +6,7 @@
  */
 
 import type { AgentDescriptor } from "./agent-descriptor.js";
+import { compareAgentCapabilityScores, scoreAgentCapability } from "./agent-match-scoring.js";
 
 export interface MatchResult {
   agentId: string;
@@ -14,6 +15,10 @@ export interface MatchResult {
   score: number;
   /** The matched capability descriptor, if found. */
   matchedCapabilityVersion: string | undefined;
+  /** Health rank used before score so healthy agents outrank degraded agents. */
+  healthTier: number;
+  /** Normalised health score used by shared ranking. */
+  healthScore: number;
 }
 
 export interface CapabilityMatcherConfig {
@@ -49,19 +54,24 @@ export class CapabilityMatcher {
       if (!cap) continue;
 
       const confidence = cap.confidence ?? 0.5;
-      const healthBonus = agent.status === "healthy" ? 1 : agent.status === "degraded" ? 0.4 : 0;
-
-      const score = confidence * this.confidenceWeight + healthBonus * this.healthWeight;
+      const capabilityScore = scoreAgentCapability(
+        agent,
+        confidence,
+        this.confidenceWeight,
+        this.healthWeight
+      );
 
       results.push({
         agentId: agent.id,
         agentName: agent.name,
-        score: Math.min(score, 1),
+        score: capabilityScore.score,
         matchedCapabilityVersion: cap.version,
+        healthTier: capabilityScore.healthTier,
+        healthScore: capabilityScore.healthScore,
       });
     }
 
-    results.sort((a, b) => b.score - a.score);
+    results.sort((a, b) => compareAgentCapabilityScores(a, b));
     return results;
   }
 
