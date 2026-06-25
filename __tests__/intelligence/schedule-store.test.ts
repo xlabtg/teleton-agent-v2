@@ -85,6 +85,22 @@ describe("ScheduleStore", () => {
     expect(updated.triggerAt.getUTCDate()).toBe(16); // next day
   });
 
+  it("advance() should stop invalid zero-interval recurrences instead of keeping them due", () => {
+    const e = store.create({
+      userId: "u1",
+      action: "invalid daily",
+      triggerAt: T("2024-06-15T08:00:00Z"),
+      recurrence: { kind: "daily", intervalDays: 0 },
+    });
+
+    store.advance(e.id, T("2024-06-15T08:00:00Z"));
+
+    const updated = store.get(e.id)!;
+    expect(updated.status).toBe("triggered");
+    expect(updated.triggerAt.toISOString()).toBe("2024-06-15T08:00:00.000Z");
+    expect(store.getDue(T("2024-06-15T08:01:00Z")).map((entry) => entry.id)).not.toContain(e.id);
+  });
+
   it("advance() should skip missed daily intervals and land after the fire time", () => {
     const e = store.create({
       userId: "u1",

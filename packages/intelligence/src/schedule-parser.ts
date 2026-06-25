@@ -164,12 +164,14 @@ export class ScheduleParser {
     // Check every-N-days / every-N-weeks patterns first (capture group needed)
     const everyNDays = text.match(/\bevery\s+(\d+)\s+days?\b/i);
     if (everyNDays) {
-      return { kind: "daily", intervalDays: parseInt(everyNDays[1], 10) };
+      const intervalDays = parseInt(everyNDays[1], 10);
+      return intervalDays >= 1 ? { kind: "daily", intervalDays } : { kind: "once" };
     }
 
     const everyNWeeks = text.match(/\bevery\s+(\d+)\s+weeks?\b/i);
     if (everyNWeeks) {
-      return { kind: "weekly", intervalWeeks: parseInt(everyNWeeks[1], 10) };
+      const intervalWeeks = parseInt(everyNWeeks[1], 10);
+      return intervalWeeks >= 1 ? { kind: "weekly", intervalWeeks } : { kind: "once" };
     }
 
     for (const { re, rule } of RECURRENCE_PATTERNS) {

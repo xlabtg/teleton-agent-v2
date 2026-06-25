@@ -52,6 +52,16 @@ describe("ScheduleParser", () => {
     }
   });
 
+  it("should reject non-positive day and week intervals", () => {
+    const everyZeroDays = parser().parse("remind me every 0 days to check the build");
+    const everyZeroWeeks = parser().parse("remind me every 0 weeks to check the build");
+
+    expect(everyZeroDays).not.toBeNull();
+    expect(everyZeroWeeks).not.toBeNull();
+    expect(everyZeroDays!.recurrence.kind).toBe("once");
+    expect(everyZeroWeeks!.recurrence.kind).toBe("once");
+  });
+
   it("should parse 'set a reminder for tomorrow'", () => {
     const result = parser().parse("set a reminder for tomorrow");
     expect(result).not.toBeNull();
