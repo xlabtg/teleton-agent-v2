@@ -145,11 +145,8 @@ export class EventStore {
   compact(): number {
     const cutoff = new Date(Date.now() - this.retentionMs).toISOString();
     const before = this.events.length;
-    let i = 0;
-    while (i < this.events.length && this.events[i].occurredAt < cutoff) {
-      i++;
-    }
-    this.events.splice(0, i);
+    const retained = this.events.filter((event) => event.occurredAt >= cutoff);
+    this.events.splice(0, this.events.length, ...retained);
     return before - this.events.length;
   }
 
