@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { DeadLetterQueue } from "../../packages/integrations/src/dead-letter-queue.js";
+import {
+  DeadLetterQueue,
+  DeadLetterQueueFullError,
+} from "../../packages/integrations/src/dead-letter-queue.js";
 import type { TypedEvent } from "../../packages/integrations/src/event-schema.js";
 
 function makeEvent(id: string): TypedEvent {
@@ -148,12 +151,26 @@ describe("DeadLetterQueue", () => {
   });
 
   describe("maxEntries cap", () => {
-    it("should drop oldest entries when cap is exceeded", () => {
+    it("should purge replayed entries before accepting a new entry", async () => {
+      const dlq = new DeadLetterQueue({ maxEntries: 2 });
+      const replayed = dlq.enqueue(makeEvent("1"), "err");
+      dlq.enqueue(makeEvent("2"), "err");
+      await dlq.replay(replayed.id, async () => {});
+
+      dlq.enqueue(makeEvent("3"), "err");
+
+      expect(dlq.size).toBe(2);
+      expect(dlq.listPending().map((entry) => entry.event.id)).toEqual(["2", "3"]);
+    });
+
+    it("should throw instead of silently dropping pending entries when full", () => {
       const dlq = new DeadLetterQueue({ maxEntries: 2 });
       dlq.enqueue(makeEvent("1"), "err");
       dlq.enqueue(makeEvent("2"), "err");
-      dlq.enqueue(makeEvent("3"), "err");
+
+      expect(() => dlq.enqueue(makeEvent("3"), "err")).toThrow(DeadLetterQueueFullError);
       expect(dlq.size).toBe(2);
+      expect(dlq.listPending().map((entry) => entry.event.id)).toEqual(["1", "2"]);
     });
   });
 });
