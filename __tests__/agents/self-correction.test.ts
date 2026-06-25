@@ -236,6 +236,19 @@ describe("SelfCorrection", () => {
     expect(result.attempts).toBe(3); // initial + 2 retries
   });
 
+  it("should cap retries by the classifier suggestion", async () => {
+    const sc = new SelfCorrection({ maxRetries: 5 });
+    let calls = 0;
+    const result = await sc.run("op", async () => {
+      calls++;
+      throw new Error("404 not found");
+    });
+
+    expect(result.success).toBe(false);
+    expect(calls).toBe(2); // initial + classifier-suggested 1 retry
+    expect(result.attempts).toBe(2);
+  });
+
   it("should open circuit breaker after threshold failures", async () => {
     const history = new CorrectionHistory();
     // Simulate already-failed attempts beyond threshold
