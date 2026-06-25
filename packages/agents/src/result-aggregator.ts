@@ -70,7 +70,7 @@ export class ResultAggregator {
       }
     }
 
-    const totalDurationMs = subtaskResults.reduce((sum, r) => sum + r.durationMs, 0);
+    const totalDurationMs = this.calculateWallClockDuration(subtaskResults);
 
     return {
       taskId,
@@ -95,5 +95,24 @@ export class ResultAggregator {
   /** Reset all recorded results (for reuse across tasks). */
   reset(): void {
     this.results.clear();
+  }
+
+  private calculateWallClockDuration(subtaskResults: SubTaskResult[]): number {
+    if (subtaskResults.length === 0) {
+      return 0;
+    }
+
+    const intervals = subtaskResults.map((result) => {
+      const completedAtMs = result.completedAt.getTime();
+      return {
+        startMs: completedAtMs - result.durationMs,
+        endMs: completedAtMs,
+      };
+    });
+
+    const earliestStartMs = Math.min(...intervals.map((interval) => interval.startMs));
+    const latestEndMs = Math.max(...intervals.map((interval) => interval.endMs));
+
+    return latestEndMs - earliestStartMs;
   }
 }
