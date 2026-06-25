@@ -20,6 +20,10 @@ export interface CacheEntry {
 export interface PredictiveCacheConfig {
   /** Default TTL in milliseconds for cached entries. */
   defaultTtlMs?: number;
+  /** Maximum number of responses retained in memory. */
+  maxEntries?: number;
+  /** Optional interval for automatic expired-entry eviction. */
+  evictExpiredIntervalMs?: number;
 }
 
 /**
@@ -30,6 +34,8 @@ export interface PredictiveCacheConfig {
 export class PredictiveCache {
   private readonly store = new Map<string, CacheEntry>();
   private readonly defaultTtlMs: number;
+  private readonly maxEntries: number;
+  private evictionTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     private readonly keyGenerator: CacheKeyGenerator,
@@ -37,6 +43,15 @@ export class PredictiveCache {
     config: PredictiveCacheConfig = {}
   ) {
     this.defaultTtlMs = config.defaultTtlMs ?? 5 * 60 * 1000; // 5 minutes
+    this.maxEntries = config.maxEntries ?? 1_000;
+
+    if (!Number.isInteger(this.maxEntries) || this.maxEntries < 1) {
+      throw new Error("PredictiveCache maxEntries must be a positive integer");
+    }
+
+    if (config.evictExpiredIntervalMs !== undefined) {
+      this.startEvictExpiredTimer(config.evictExpiredIntervalMs);
+    }
   }
 
   /**
@@ -54,11 +69,12 @@ export class PredictiveCache {
     }
 
     if (entry.expiresAt < new Date()) {
-      this.store.delete(key);
+      this.deleteEntry(key);
       this.metrics.recordMiss();
       return null;
     }
 
+    this.markRecentlyUsed(key, entry);
     this.metrics.recordHit(0, entry.fromWarming);
     return entry.response;
   }
@@ -76,13 +92,17 @@ export class PredictiveCache {
     const now = new Date();
     const ttl = ttlMs ?? this.defaultTtlMs;
 
-    this.store.set(key, {
+    const entry = {
       key,
       response,
       createdAt: now,
       expiresAt: new Date(now.getTime() + ttl),
       fromWarming,
-    });
+    };
+
+    this.store.delete(key);
+    this.store.set(key, entry);
+    this.evictOverflow();
   }
 
   /**
@@ -91,7 +111,7 @@ export class PredictiveCache {
   async invalidate(query: string): Promise<void> {
     const key = await this.keyGenerator.getKey(query);
     this.dropEvictedKeyEntries();
-    this.store.delete(key);
+    this.deleteEntry(key);
   }
 
   /**
@@ -102,11 +122,35 @@ export class PredictiveCache {
     let evicted = 0;
     for (const [key, entry] of this.store) {
       if (entry.expiresAt < now) {
-        this.store.delete(key);
+        this.deleteEntry(key);
         evicted++;
       }
     }
     return evicted;
+  }
+
+  /**
+   * Start periodically sweeping expired entries. Calling again replaces
+   * the previous timer.
+   */
+  startEvictExpiredTimer(intervalMs: number): void {
+    if (!Number.isInteger(intervalMs) || intervalMs < 1) {
+      throw new Error("PredictiveCache evictExpiredIntervalMs must be a positive integer");
+    }
+
+    this.stopEvictExpiredTimer();
+    this.evictionTimer = setInterval(() => {
+      this.evictExpired();
+    }, intervalMs);
+    this.evictionTimer.unref?.();
+  }
+
+  /** Stop the automatic expired-entry sweep, if one is running. */
+  stopEvictExpiredTimer(): void {
+    if (this.evictionTimer) {
+      clearInterval(this.evictionTimer);
+      this.evictionTimer = undefined;
+    }
   }
 
   /** Number of entries currently in the store (including potentially expired ones). */
@@ -124,5 +168,25 @@ export class PredictiveCache {
     for (const key of this.keyGenerator.drainEvictedKeys()) {
       this.store.delete(key);
     }
+  }
+
+  private markRecentlyUsed(key: string, entry: CacheEntry): void {
+    this.store.delete(key);
+    this.store.set(key, entry);
+  }
+
+  private evictOverflow(): void {
+    while (this.store.size > this.maxEntries) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey === undefined) {
+        return;
+      }
+      this.deleteEntry(oldestKey);
+    }
+  }
+
+  private deleteEntry(key: string): void {
+    this.store.delete(key);
+    this.keyGenerator.deleteKey(key);
   }
 }

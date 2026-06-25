@@ -95,6 +95,28 @@ export class CacheKeyGenerator {
   }
 
   /**
+   * Remove a registered key and any pending eviction notification for it.
+   */
+  deleteKey(key: string): boolean {
+    let deleted = false;
+
+    for (let i = this.keys.length - 1; i >= 0; i--) {
+      if (this.keys[i].key === key) {
+        this.keys.splice(i, 1);
+        deleted = true;
+      }
+    }
+
+    for (let i = this.evictedKeys.length - 1; i >= 0; i--) {
+      if (this.evictedKeys[i] === key) {
+        this.evictedKeys.splice(i, 1);
+      }
+    }
+
+    return deleted;
+  }
+
+  /**
    * Clear all registered keys.
    */
   clear(): void {

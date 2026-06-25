@@ -230,8 +230,43 @@ describe("PredictiveCache", () => {
     await cache.set("q3", "r3");
 
     expect(cache.size()).toBe(2);
-    expect(await cache.get("q2")).toBe("r2");
-    expect(await cache.get("q3")).toBe("r3");
     expect(keyGen.getRegisteredKeys().map((entry) => entry.query)).toEqual(["q2", "q3"]);
+    expect(await cache.get("q1")).toBeNull();
+    expect(await cache.get("q3")).toBe("r3");
+  });
+
+  it("should evict least recently used responses when cache capacity is exceeded", async () => {
+    provider = createExactEmbeddingProvider();
+    keyGen = new CacheKeyGenerator(provider, {
+      similarityThreshold: 1,
+      maxEntries: 10,
+    });
+    cache = new PredictiveCache(keyGen, metrics, { defaultTtlMs: 60_000, maxEntries: 2 });
+
+    await cache.set("q1", "r1");
+    await cache.set("q2", "r2");
+    expect(await cache.get("q1")).toBe("r1");
+
+    await cache.set("q3", "r3");
+
+    expect(cache.size()).toBe(2);
+    expect(keyGen.getRegisteredKeys().map((entry) => entry.query)).toEqual(["q1", "q3"]);
+    expect(await cache.get("q2")).toBeNull();
+    expect(await cache.get("q1")).toBe("r1");
+    expect(await cache.get("q3")).toBe("r3");
+  });
+
+  it("should support automatic expired-entry eviction", async () => {
+    cache = new PredictiveCache(keyGen, metrics, {
+      defaultTtlMs: 1,
+      evictExpiredIntervalMs: 5,
+    });
+
+    try {
+      await cache.set("hello world", "response text");
+      await vi.waitFor(() => expect(cache.size()).toBe(0));
+    } finally {
+      cache.stopEvictExpiredTimer();
+    }
   });
 });
