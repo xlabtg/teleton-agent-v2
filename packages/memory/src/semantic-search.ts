@@ -61,9 +61,13 @@ export class SemanticSearch {
       newEmbeddings = await this.embeddingProvider.embedBatch(textsToEmbed);
     }
 
+    const embeddings: number[][] = new Array(entries.length);
+    for (let j = 0; j < indicesToEmbed.length; j++) {
+      embeddings[indicesToEmbed[j]] = newEmbeddings[j];
+    }
+
     const vectorEntries = entries.map((entry, i) => {
-      const embeddingIdx = indicesToEmbed.indexOf(i);
-      const embedding = entry.embedding ?? newEmbeddings[embeddingIdx];
+      const embedding = entry.embedding ?? embeddings[i];
 
       return {
         id: entry.id,
