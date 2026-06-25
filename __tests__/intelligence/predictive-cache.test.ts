@@ -45,6 +45,21 @@ function createExactEmbeddingProvider(): EmbeddingProvider {
   };
 }
 
+function createMismatchedEmbeddingProvider(): EmbeddingProvider {
+  const embeddings: Record<string, number[]> = {
+    short: [1, 0],
+    long: [1, 0, 99],
+  };
+
+  return {
+    embed: vi.fn().mockImplementation(async (text: string) => embeddings[text] ?? [0, 1]),
+    embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
+      return texts.map((text) => embeddings[text] ?? [0, 1]);
+    }),
+    dimensions: vi.fn().mockReturnValue(3),
+  };
+}
+
 describe("CacheKeyGenerator", () => {
   let provider: EmbeddingProvider;
   let generator: CacheKeyGenerator;
@@ -98,6 +113,19 @@ describe("CacheKeyGenerator", () => {
     expect(bounded.getRegisteredKeys().map((entry) => entry.key)).toEqual([q1Key, q3Key]);
     expect(bounded.getRegisteredKeys()).toHaveLength(2);
     expect(bounded.getEvictedKeys()).toEqual([q2Key]);
+  });
+
+  it("should not reuse keys for mismatched embedding dimensions", async () => {
+    const mismatchedProvider = createMismatchedEmbeddingProvider();
+    const mismatched = new CacheKeyGenerator(mismatchedProvider, {
+      similarityThreshold: 0.92,
+    });
+
+    const shortKey = await mismatched.getKey("short");
+    const longKey = await mismatched.getKey("long");
+
+    expect(longKey).not.toBe(shortKey);
+    expect(mismatched.getRegisteredKeys()).toHaveLength(2);
   });
 });
 
