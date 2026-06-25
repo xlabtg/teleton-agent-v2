@@ -121,8 +121,17 @@ export class SelfCorrection {
           };
         }
 
+        const effectiveMaxRetries = Math.min(this.maxRetries, classification.suggestedMaxRetries);
+
         // Exhausted retries.
-        if (attempt > this.maxRetries) break;
+        if (attempt > effectiveMaxRetries) {
+          return {
+            success: false,
+            error: String(lastError),
+            attempts: attempt,
+            corrections,
+          };
+        }
 
         // Apply correction strategy.
         const correctionResult = await this.strategyRegistry.apply({
