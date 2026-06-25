@@ -11,11 +11,21 @@
 
 import type { PipelineState } from "./pipeline-state.js";
 
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends Date
+    ? T
+    : T extends readonly (infer U)[]
+      ? readonly DeepReadonly<U>[]
+      : T extends object
+        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
+
 export interface CheckpointEntry {
   pipelineId: string;
   checkpointAt: Date;
   /** Deep-cloned snapshot of the pipeline state at checkpoint time. */
-  snapshot: Omit<PipelineState, "steps"> & { steps: Record<string, unknown> };
+  snapshot: DeepReadonly<Omit<PipelineState, "steps"> & { steps: Record<string, unknown> }>;
 }
 
 export interface CheckpointStore {
@@ -32,12 +42,14 @@ function serialise(state: PipelineState): CheckpointEntry["snapshot"] {
     steps[name] = {
       ...stepState,
       definition: { ...stepState.definition },
+      output: structuredClone(stepState.output),
     };
   }
   return {
     ...state,
+    context: structuredClone(state.context),
     steps,
-  };
+  } as CheckpointEntry["snapshot"];
 }
 
 export class InMemoryCheckpointStore implements CheckpointStore {
