@@ -26,6 +26,11 @@ export interface AlertRouterConfig {
    * another alert of the same or lower severity. Set to 0 to disable.
    */
   deduplicationWindowMs?: number;
+  /**
+   * Maximum number of recent alerts to retain in memory. Set to 0 to disable
+   * history retention.
+   */
+  maxHistorySize?: number;
 }
 
 /**
@@ -35,10 +40,12 @@ export class AlertRouter {
   private readonly handlers: AlertHandler[] = [];
   private readonly lastFiredAt = new Map<string, Date>();
   private readonly deduplicationWindowMs: number;
+  private readonly maxHistorySize: number;
   private readonly alertHistory: Alert[] = [];
 
   constructor(config: AlertRouterConfig = {}) {
     this.deduplicationWindowMs = config.deduplicationWindowMs ?? 5 * 60 * 1000; // 5 min
+    this.maxHistorySize = Math.max(0, Math.floor(config.maxHistorySize ?? 1_000));
   }
 
   /**
@@ -68,14 +75,14 @@ export class AlertRouter {
         const suppressedUntil = new Date(last.getTime() + this.deduplicationWindowMs);
         if (suppressedUntil > full.detectedAt) {
           full.suppressedUntil = suppressedUntil;
-          this.alertHistory.push(full);
+          this.recordHistory(full);
           return full; // Suppressed — do not dispatch to handlers
         }
       }
       this.lastFiredAt.set(dedupeKey, full.detectedAt);
     }
 
-    this.alertHistory.push(full);
+    this.recordHistory(full);
 
     // Dispatch to handlers (errors are caught to avoid breaking the pipeline)
     for (const handler of this.handlers) {
@@ -92,9 +99,21 @@ export class AlertRouter {
   /**
    * Return recent alert history (most recent first), optionally filtered by metric.
    */
-  getHistory(metric?: string): Alert[] {
-    const history = [...this.alertHistory].reverse();
-    return metric ? history.filter((a) => a.metric === metric) : history;
+  getHistory(metric?: string, limit?: number): Alert[] {
+    const maxResults = limit === undefined ? undefined : Math.max(0, Math.floor(limit));
+    const history: Alert[] = [];
+
+    for (let i = this.alertHistory.length - 1; i >= 0; i--) {
+      const alert = this.alertHistory[i];
+      if (!metric || alert.metric === metric) {
+        history.push(alert);
+        if (maxResults !== undefined && history.length >= maxResults) {
+          break;
+        }
+      }
+    }
+
+    return history;
   }
 
   /**
@@ -103,5 +122,17 @@ export class AlertRouter {
    */
   markFalsePositive(_alertId: string): void {
     // Stub for future feedback integration
+  }
+
+  private recordHistory(alert: Alert): void {
+    if (this.maxHistorySize === 0) {
+      return;
+    }
+
+    this.alertHistory.push(alert);
+    const overflow = this.alertHistory.length - this.maxHistorySize;
+    if (overflow > 0) {
+      this.alertHistory.splice(0, overflow);
+    }
   }
 }
