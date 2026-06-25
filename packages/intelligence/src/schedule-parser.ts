@@ -141,9 +141,8 @@ export class ScheduleParser {
       timeExtractions.map((e) => e.match)
     );
 
-    // Confidence: penalise if we have no intent keyword or no time expression
+    // Confidence: penalise if we have no time expression
     let confidence = 1.0;
-    if (!hasIntent) confidence -= 0.3;
     if (!validTime) confidence -= 0.3;
     confidence = Math.max(0, confidence);
 
