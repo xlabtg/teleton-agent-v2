@@ -54,8 +54,6 @@ const UNIT_MS: Record<string, number> = {
   hour: 3_600_000,
   day: 86_400_000,
   week: 7 * 86_400_000,
-  month: 30 * 86_400_000,
-  year: 365 * 86_400_000,
 };
 
 const WEEKDAY_INDEX: Record<string, number> = {
@@ -104,6 +102,44 @@ function isValidWallClockDate(year: number, month: number, day: number): boolean
     candidate.getUTCFullYear() === year &&
     candidate.getUTCMonth() === month &&
     candidate.getUTCDate() === day
+  );
+}
+
+function daysInUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
+function addCalendarUnits(
+  d: Date,
+  unit: "month" | "year",
+  amount: number,
+  userUtcOffsetMinutes: number
+): Date {
+  const wallClock = toUserWallClock(d, userUtcOffsetMinutes);
+  const sourceDay = wallClock.getUTCDate();
+  let targetYear = wallClock.getUTCFullYear();
+  let targetMonth = wallClock.getUTCMonth();
+
+  if (unit === "month") {
+    targetMonth += amount;
+    targetYear += Math.floor(targetMonth / 12);
+    targetMonth %= 12;
+    if (targetMonth < 0) {
+      targetMonth += 12;
+      targetYear -= 1;
+    }
+  } else {
+    targetYear += amount;
+  }
+
+  const targetDay = Math.min(sourceDay, daysInUtcMonth(targetYear, targetMonth));
+  return fromUserWallClock(
+    targetYear,
+    targetMonth,
+    targetDay,
+    wallClock.getUTCHours(),
+    wallClock.getUTCMinutes(),
+    userUtcOffsetMinutes
   );
 }
 
@@ -221,24 +257,35 @@ export class TimeParser {
     const inMatch = normalised.match(RELATIVE_UNIT_RE);
     if (inMatch) {
       const n = parseInt(inMatch[1], 10);
-      const unit = inMatch[2].toLowerCase();
-      const offsetMs = n * UNIT_MS[unit];
-      const date = applyTimeOfDay(
-        new Date(this.ref.getTime() + offsetMs),
-        normalised,
-        this.userUtcOffsetMinutes
-      );
-      return { kind: "relative", date, raw: normalised, offsetMs };
+      const unit = inMatch[2].toLowerCase() as keyof typeof UNIT_MS | "month" | "year";
+      const baseDate =
+        unit === "month" || unit === "year"
+          ? addCalendarUnits(this.ref, unit, n, this.userUtcOffsetMinutes)
+          : new Date(this.ref.getTime() + n * UNIT_MS[unit]);
+      const date = applyTimeOfDay(baseDate, normalised, this.userUtcOffsetMinutes);
+      return {
+        kind: "relative",
+        date,
+        raw: normalised,
+        offsetMs: date.getTime() - this.ref.getTime(),
+      };
     }
 
     // 2. "N unit(s) ago"
     const agoMatch = normalised.match(AGO_UNIT_RE);
     if (agoMatch) {
       const n = parseInt(agoMatch[1], 10);
-      const unit = agoMatch[2].toLowerCase();
-      const offsetMs = -(n * UNIT_MS[unit]);
-      const date = new Date(this.ref.getTime() + offsetMs);
-      return { kind: "relative", date, raw: normalised, offsetMs };
+      const unit = agoMatch[2].toLowerCase() as keyof typeof UNIT_MS | "month" | "year";
+      const date =
+        unit === "month" || unit === "year"
+          ? addCalendarUnits(this.ref, unit, -n, this.userUtcOffsetMinutes)
+          : new Date(this.ref.getTime() - n * UNIT_MS[unit]);
+      return {
+        kind: "relative",
+        date,
+        raw: normalised,
+        offsetMs: date.getTime() - this.ref.getTime(),
+      };
     }
 
     // 3. Named relative terms
@@ -427,24 +474,16 @@ export class TimeParser {
         return d;
       }
       case "next month": {
-        const d = new Date(today);
-        d.setUTCMonth(d.getUTCMonth() + 1);
-        return d;
+        return addCalendarUnits(today, "month", 1, this.userUtcOffsetMinutes);
       }
       case "last month": {
-        const d = new Date(today);
-        d.setUTCMonth(d.getUTCMonth() - 1);
-        return d;
+        return addCalendarUnits(today, "month", -1, this.userUtcOffsetMinutes);
       }
       case "next year": {
-        const d = new Date(today);
-        d.setUTCFullYear(d.getUTCFullYear() + 1);
-        return d;
+        return addCalendarUnits(today, "year", 1, this.userUtcOffsetMinutes);
       }
       case "last year": {
-        const d = new Date(today);
-        d.setUTCFullYear(d.getUTCFullYear() - 1);
-        return d;
+        return addCalendarUnits(today, "year", -1, this.userUtcOffsetMinutes);
       }
       default:
         return null;

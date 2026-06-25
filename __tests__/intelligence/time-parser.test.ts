@@ -37,6 +37,50 @@ describe("TimeParser", () => {
         expect(result.date.getTime()).toBeCloseTo(REF.getTime() + 7 * 86_400_000, -2);
       }
     });
+
+    it("should resolve 'in 1 month' using calendar arithmetic across 31-day months", () => {
+      const result = new TimeParser({ referenceDate: new Date("2024-07-15T12:00:00Z") }).parse(
+        "in 1 month"
+      );
+
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-08-15T12:00:00.000Z");
+      }
+    });
+
+    it("should clamp 'in 1 month' when the target month has fewer days", () => {
+      const result = new TimeParser({ referenceDate: new Date("2024-01-31T12:00:00Z") }).parse(
+        "in 1 month"
+      );
+
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-02-29T12:00:00.000Z");
+      }
+    });
+
+    it("should resolve 'in 1 year' using calendar arithmetic across a leap year", () => {
+      const result = new TimeParser({ referenceDate: new Date("2023-03-01T12:00:00Z") }).parse(
+        "in 1 year"
+      );
+
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-03-01T12:00:00.000Z");
+      }
+    });
+
+    it("should clamp 'in 1 year' from leap day to the last day of February", () => {
+      const result = new TimeParser({ referenceDate: new Date("2024-02-29T12:00:00Z") }).parse(
+        "in 1 year"
+      );
+
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2025-02-28T12:00:00.000Z");
+      }
+    });
   });
 
   describe("relative: 'N unit ago'", () => {
@@ -45,6 +89,17 @@ describe("TimeParser", () => {
       expect(result.kind).toBe("relative");
       if (result.kind === "relative") {
         expect(result.offsetMs).toBe(-(3 * 86_400_000));
+      }
+    });
+
+    it("should resolve '1 month ago' using calendar arithmetic", () => {
+      const result = new TimeParser({ referenceDate: new Date("2024-03-31T12:00:00Z") }).parse(
+        "1 month ago"
+      );
+
+      expect(result.kind).toBe("relative");
+      if (result.kind === "relative") {
+        expect(result.date.toISOString()).toBe("2024-02-29T12:00:00.000Z");
       }
     });
   });
