@@ -9,6 +9,7 @@ import type { MemoryEntry } from "../../packages/core/src/domain/agent.interface
 import type { EventBus } from "../../packages/core/src/domain/events.js";
 import type { MemoryRepository } from "../../packages/core/src/ports/repository.port.js";
 import { InMemoryGraphStore } from "../../packages/memory/src/graph-store.js";
+import { GraphQuery } from "../../packages/memory/src/graph-query.js";
 import type { EntityExtractor } from "../../packages/memory/src/entity-extractor.js";
 import type { SemanticSearch } from "../../packages/memory/src/semantic-search.js";
 
@@ -182,5 +183,80 @@ describe("MemoryManager", () => {
     expect(graphStore.findNodesByLabel("Daily")).toEqual([daily]);
     expect(graphStore.findNodesByLabel("AI")).toHaveLength(1);
     expect(graphStore.nodeCount()).toBe(2);
+  });
+
+  it("builds graph context from entities extracted out of a natural-language query", async () => {
+    const entry = makeEntry("mem-graph-context");
+    const memoryRepository = {
+      store: vi.fn(),
+      findById: vi.fn(),
+      list: vi.fn(),
+      search: vi.fn(),
+      searchByEmbedding: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      compact: vi.fn(),
+    } satisfies MemoryRepository;
+    const semanticSearch = { index: vi.fn() } as unknown as SemanticSearch;
+    const hybridRetrieval = {
+      search: vi.fn().mockResolvedValue([{ entry, score: 0.9, source: "keyword" }]),
+    } as unknown as HybridRetrieval;
+    const scorer = { recordAccess: vi.fn() } as unknown as ImportanceScorer;
+    const retentionPolicy = { getEvictionCandidates: vi.fn() } as unknown as RetentionPolicy;
+    const compaction = { compact: vi.fn() } as unknown as MemoryCompaction;
+    const eventBus = { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn() } as EventBus;
+    const graphStore = new InMemoryGraphStore();
+    const database = graphStore.addNode({
+      type: "concept",
+      label: "Database",
+      properties: { memoryId: entry.id },
+    });
+    const connection = graphStore.addNode({
+      type: "concept",
+      label: "Connection",
+      properties: { memoryId: entry.id },
+    });
+    graphStore.addEdge({
+      sourceId: database.id,
+      targetId: connection.id,
+      type: "related_to",
+      weight: 0.8,
+      properties: { memoryId: entry.id },
+    });
+    const entityExtractor = {
+      extract: vi.fn().mockResolvedValue({
+        entities: [
+          { label: "Database", type: "concept", properties: {} },
+          { label: "Connection", type: "concept", properties: {} },
+        ],
+        relations: [],
+      }),
+    } as unknown as EntityExtractor;
+    const manager = new MemoryManager(
+      memoryRepository,
+      semanticSearch,
+      hybridRetrieval,
+      scorer,
+      retentionPolicy,
+      compaction,
+      eventBus,
+      graphStore,
+      entityExtractor,
+      new GraphQuery(graphStore),
+      { autoIndex: false }
+    );
+
+    const result = await manager.search("how do I configure the database connection?", {
+      includeGraph: true,
+    });
+
+    expect(entityExtractor.extract).toHaveBeenCalledWith(
+      "how do I configure the database connection?"
+    );
+    expect(result.graphContext?.nodes.map((node) => node.label).sort()).toEqual([
+      "Connection",
+      "Database",
+    ]);
+    expect(result.graphContext?.edges).toHaveLength(1);
   });
 });

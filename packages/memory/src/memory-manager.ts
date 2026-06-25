@@ -121,7 +121,13 @@ export class MemoryManager {
     });
 
     let graphContext: SubgraphResult | undefined;
-    if (includeGraph && this.graphStore && this.graphQuery && results.length > 0) {
+    if (
+      includeGraph &&
+      this.graphStore &&
+      this.entityExtractor &&
+      this.graphQuery &&
+      results.length > 0
+    ) {
       graphContext = await this.getGraphContext(query);
     }
 
@@ -217,16 +223,32 @@ export class MemoryManager {
   }
 
   private async getGraphContext(query: string): Promise<SubgraphResult | undefined> {
-    if (!this.graphStore || !this.graphQuery) return undefined;
+    if (!this.graphStore || !this.entityExtractor || !this.graphQuery) return undefined;
 
-    // Find nodes matching the query
-    const matchingNodes = this.graphStore.findNodesByLabel(query);
-    if (matchingNodes.length === 0) return undefined;
+    const { entities } = await this.entityExtractor.extract(query);
+    const seedNodes = entities.flatMap((entity) => this.graphStore!.findNodesByLabel(entity.label));
+    if (seedNodes.length === 0) return undefined;
 
-    // Get subgraph around the first matching node
-    return this.graphQuery.getSubgraph(matchingNodes[0].id, {
-      maxDepth: 2,
-      maxResults: 20,
-    });
+    const nodes = new Map<string, SubgraphResult["nodes"][number]>();
+    const edges = new Map<string, SubgraphResult["edges"][number]>();
+
+    for (const seedNode of seedNodes) {
+      const subgraph = this.graphQuery.getSubgraph(seedNode.id, {
+        maxDepth: 2,
+        maxResults: 20,
+      });
+
+      for (const node of subgraph.nodes) {
+        nodes.set(node.id, node);
+      }
+      for (const edge of subgraph.edges) {
+        edges.set(edge.id, edge);
+      }
+    }
+
+    return {
+      nodes: Array.from(nodes.values()),
+      edges: Array.from(edges.values()),
+    };
   }
 }
