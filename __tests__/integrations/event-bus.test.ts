@@ -107,6 +107,29 @@ describe("EventBus", () => {
       expect(bus.dlq?.size).toBe(1);
       expect(bus.dlq?.listPending()[0].errorMessage).toBe("handler error");
     });
+
+    it("should isolate synchronous handler throws and continue dispatching", async () => {
+      const bus = new EventBus({ store: false });
+      const healthyHandler = vi.fn();
+
+      bus.subscribe(
+        "bad.event",
+        () => {
+          throw new Error("sync handler error");
+        },
+        "sync-bad-handler"
+      );
+      bus.subscribe("bad.event", healthyHandler, "healthy-handler");
+
+      await expect(bus.publish(makeEvent("1", "bad.event"))).resolves.toBeUndefined();
+
+      expect(healthyHandler).toHaveBeenCalledTimes(1);
+      expect(bus.dlq?.size).toBe(1);
+      expect(bus.dlq?.listPending()[0]).toMatchObject({
+        errorMessage: "sync handler error",
+        handlerName: "sync-bad-handler",
+      });
+    });
   });
 
   describe("publishBatch()", () => {
