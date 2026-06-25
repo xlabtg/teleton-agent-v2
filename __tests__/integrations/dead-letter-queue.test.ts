@@ -131,7 +131,7 @@ describe("DeadLetterQueue", () => {
     });
   });
 
-  describe("remove() / purgeReplayed()", () => {
+  describe("remove() / purgeReplayed() / purgePermanentFailures()", () => {
     it("should remove by ID", () => {
       const dlq = new DeadLetterQueue();
       const entry = dlq.enqueue(makeEvent("1"), "err");
@@ -147,6 +147,23 @@ describe("DeadLetterQueue", () => {
       const discarded = dlq.purgeReplayed();
       expect(discarded).toBe(1);
       expect(dlq.size).toBe(1);
+    });
+
+    it("purgePermanentFailures() should reclaim exhausted entries while keeping pending entries", async () => {
+      const dlq = new DeadLetterQueue({ maxRetries: 1, retryBaseDelayMs: 0 });
+      const exhausted = dlq.enqueue(makeEvent("1"), "err");
+      dlq.enqueue(makeEvent("2"), "err");
+
+      await dlq.replay(exhausted.id, async () => {
+        throw new Error("still failing");
+      });
+
+      const discarded = dlq.purgePermanentFailures();
+
+      expect(discarded).toBe(1);
+      expect(dlq.size).toBe(1);
+      expect(dlq.listPending().map((entry) => entry.event.id)).toEqual(["2"]);
+      expect(dlq.listPermanentFailures()).toHaveLength(0);
     });
   });
 
