@@ -129,6 +129,64 @@ describe("ContextSerializer", () => {
       expect(restored.memory[0].createdAt).toBeInstanceOf(Date);
       expect(restored.availableTools).toEqual([]);
     });
+
+    it("should reject malformed snapshots before deserializing", () => {
+      const snapshot = new ContextSerializer("agent-a").serialize(makeContext());
+
+      expect(() =>
+        ContextSerializer.deserialize({
+          ...snapshot,
+          conversationHistory: "not-an-array",
+        } as unknown as Parameters<typeof ContextSerializer.deserialize>[0])
+      ).toThrow("Invalid serialized agent context");
+    });
+
+    it("should reject unsupported schema versions", () => {
+      const snapshot = new ContextSerializer("agent-a").serialize(makeContext());
+
+      expect(() =>
+        ContextSerializer.deserialize({
+          ...snapshot,
+          schemaVersion: "2.0",
+        } as unknown as Parameters<typeof ContextSerializer.deserialize>[0])
+      ).toThrow("Invalid serialized agent context");
+    });
+
+    it("should reject oversized snapshots", () => {
+      const snapshot = new ContextSerializer("agent-a").serialize(makeContext());
+
+      expect(() =>
+        ContextSerializer.deserialize({
+          ...snapshot,
+          conversationHistory: Array.from({ length: 101 }, () => snapshot.conversationHistory[0]),
+        })
+      ).toThrow("Invalid serialized agent context");
+    });
+
+    it("should sanitize metadata maps from untrusted snapshots", () => {
+      const snapshot = new ContextSerializer("agent-a").serialize(makeContext());
+      const restored = ContextSerializer.deserialize({
+        ...snapshot,
+        conversationHistory: [
+          {
+            ...snapshot.conversationHistory[0],
+            metadata: {
+              safe: "value",
+              constructor: { prototype: { polluted: true } },
+            },
+          },
+        ],
+        memory: [],
+        metadata: {
+          handoff: "safe",
+          __proto__: { polluted: true },
+        },
+      });
+
+      expect(restored.conversationHistory[0].metadata).toEqual({ safe: "value" });
+      expect(Object.getPrototypeOf(restored.conversationHistory[0].metadata)).toBe(null);
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
   });
 
   describe("merge", () => {
@@ -209,6 +267,18 @@ describe("ContextSerializer", () => {
         "Shared message",
         "Local reply",
       ]);
+    });
+
+    it("should reject malformed remote snapshots before merging", () => {
+      const local = makeContext();
+      const remoteSnapshot = new ContextSerializer("agent-b").serialize(makeContext());
+
+      expect(() =>
+        ContextSerializer.merge(local, {
+          ...remoteSnapshot,
+          memory: "not-an-array",
+        } as unknown as Parameters<typeof ContextSerializer.merge>[1])
+      ).toThrow("Invalid serialized agent context");
     });
   });
 });

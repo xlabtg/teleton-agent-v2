@@ -7,6 +7,7 @@
  */
 
 import type { AgentContext, MemoryEntry, Message } from "../../core/src/domain/agent.interface.js";
+import { z } from "zod";
 
 // ─── Serialized types ─────────────────────────────────────────────────────────
 
@@ -93,6 +94,73 @@ export interface SerializeOptions {
 
 // ─── ContextSerializer ────────────────────────────────────────────────────────
 
+const MAX_DESERIALIZED_MESSAGES = 100;
+const MAX_DESERIALIZED_MEMORY_ENTRIES = 200;
+const MAX_TAGS_PER_MEMORY_ENTRY = 50;
+const MAX_EMBEDDING_VALUES = 4096;
+const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+const IsoDateStringSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+  message: "Expected an ISO-8601 date string",
+});
+
+const JsonLikeSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonLikeSchema).max(100),
+    z.record(JsonLikeSchema),
+  ])
+);
+
+const MetadataSchema = z.record(JsonLikeSchema);
+
+const SerializedMessageSchema = z
+  .object({
+    role: z.enum(["user", "assistant", "system", "tool"]),
+    content: z.string(),
+    timestamp: IsoDateStringSchema,
+    metadata: MetadataSchema.optional(),
+  })
+  .strict();
+
+const SerializedMemoryEntrySchema = z
+  .object({
+    id: z.string(),
+    content: z.string(),
+    importance: z.number().finite(),
+    createdAt: IsoDateStringSchema,
+    accessedAt: IsoDateStringSchema,
+    tags: z.array(z.string()).max(MAX_TAGS_PER_MEMORY_ENTRY),
+    embedding: z.array(z.number().finite()).max(MAX_EMBEDDING_VALUES).optional(),
+  })
+  .strict();
+
+const TaskStateSnapshotSchema = z
+  .object({
+    taskId: z.string(),
+    name: z.string(),
+    state: MetadataSchema,
+    snapshotAt: IsoDateStringSchema,
+  })
+  .strict();
+
+const SerializedAgentContextSchema = z
+  .object({
+    schemaVersion: z.literal("1.0"),
+    agentId: z.string(),
+    sessionId: z.string(),
+    userId: z.string(),
+    capturedAt: IsoDateStringSchema,
+    conversationHistory: z.array(SerializedMessageSchema).max(MAX_DESERIALIZED_MESSAGES),
+    memory: z.array(SerializedMemoryEntrySchema).max(MAX_DESERIALIZED_MEMORY_ENTRIES),
+    taskState: TaskStateSnapshotSchema.optional(),
+    metadata: MetadataSchema,
+  })
+  .strict();
+
 /**
  * Utility class for converting AgentContext to and from wire-safe snapshots.
  *
@@ -150,13 +218,15 @@ export class ContextSerializer {
    * must populate these based on its own capabilities.
    */
   static deserialize(snapshot: SerializedAgentContext): AgentContext {
+    const trustedSnapshot = validateSnapshot(snapshot);
+
     return {
-      sessionId: snapshot.sessionId,
-      userId: snapshot.userId,
-      conversationHistory: snapshot.conversationHistory.map(deserializeMessage),
-      memory: snapshot.memory.map(deserializeMemoryEntry),
+      sessionId: trustedSnapshot.sessionId,
+      userId: trustedSnapshot.userId,
+      conversationHistory: trustedSnapshot.conversationHistory.map(deserializeMessage),
+      memory: trustedSnapshot.memory.map(deserializeMemoryEntry),
       availableTools: [],
-      timestamp: new Date(snapshot.capturedAt),
+      timestamp: new Date(trustedSnapshot.capturedAt),
     };
   }
 
@@ -167,8 +237,9 @@ export class ContextSerializer {
    * entries (same id) are skipped, making repeated merges idempotent.
    */
   static merge(local: AgentContext, remote: SerializedAgentContext): AgentContext {
-    const remoteMessages = remote.conversationHistory.map(deserializeMessage);
-    const remoteMemory = remote.memory.map(deserializeMemoryEntry);
+    const trustedRemote = validateSnapshot(remote);
+    const remoteMessages = trustedRemote.conversationHistory.map(deserializeMessage);
+    const remoteMemory = trustedRemote.memory.map(deserializeMemoryEntry);
 
     const localMessageKeys = new Set(local.conversationHistory.map(messageDedupKey));
     const newMessages = remoteMessages.filter((m) => !localMessageKeys.has(messageDedupKey(m)));
@@ -200,7 +271,7 @@ function deserializeMessage(m: SerializedMessage): Message {
     role: m.role,
     content: m.content,
     timestamp: new Date(m.timestamp),
-    metadata: m.metadata,
+    metadata: m.metadata ? sanitizeRecord(m.metadata) : undefined,
   };
 }
 
@@ -230,4 +301,60 @@ function deserializeMemoryEntry(e: SerializedMemoryEntry): MemoryEntry {
     tags: [...e.tags],
     embedding: e.embedding,
   };
+}
+
+function validateSnapshot(snapshot: unknown): SerializedAgentContext {
+  const result = SerializedAgentContextSchema.safeParse(snapshot);
+  if (!result.success) {
+    throw new Error(
+      `Invalid serialized agent context: ${result.error.issues[0]?.message ?? "unknown error"}`
+    );
+  }
+
+  return sanitizeSnapshot(result.data);
+}
+
+function sanitizeSnapshot(snapshot: SerializedAgentContext): SerializedAgentContext {
+  return {
+    ...snapshot,
+    conversationHistory: snapshot.conversationHistory.map((message) => ({
+      ...message,
+      metadata: message.metadata ? sanitizeRecord(message.metadata) : undefined,
+    })),
+    memory: snapshot.memory.map((entry) => ({
+      ...entry,
+      tags: [...entry.tags],
+      embedding: entry.embedding ? [...entry.embedding] : undefined,
+    })),
+    taskState: snapshot.taskState
+      ? {
+          ...snapshot.taskState,
+          state: sanitizeRecord(snapshot.taskState.state),
+        }
+      : undefined,
+    metadata: sanitizeRecord(snapshot.metadata),
+  };
+}
+
+function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries(record)) {
+    if (UNSAFE_OBJECT_KEYS.has(key)) {
+      continue;
+    }
+    sanitized[key] = sanitizeValue(value);
+  }
+
+  return sanitized;
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue);
+  }
+  if (value && typeof value === "object") {
+    return sanitizeRecord(value as Record<string, unknown>);
+  }
+  return value;
 }
